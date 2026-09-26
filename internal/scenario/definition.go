@@ -92,6 +92,10 @@ type InjectFaultConfig struct {
 	Per *string `json:"per,omitempty"`
 
 	DelayDistribution map[string]any `json:"delayDistribution,omitempty"`
+
+	Body any `json:"body,omitempty"`
+
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type VerifyRequestsConfig struct {
@@ -517,8 +521,33 @@ func (p *parser) parseConfig(pointer, stepType string, cfg map[string]any) any {
 		}
 		return out
 	case "INJECT_FAULT":
-		p.checkKeys(pointer, cfg, "method", "path", "kind", "status", "delayMs", "probability", "target", "wallclock", "times", "per", "delayDistribution")
+		p.checkKeys(pointer, cfg, "method", "path", "kind", "status", "delayMs", "probability", "target", "wallclock", "times", "per", "delayDistribution", "body", "headers")
 		out := &InjectFaultConfig{}
+		if v, has := cfg["body"]; has {
+			switch v.(type) {
+			case map[string]any, []any:
+				out.Body = v
+			default:
+				p.fail(pointer+"/body", "body must be a JSON object or array")
+			}
+		}
+		if v, has := cfg["headers"]; has {
+			hs, ok := v.(map[string]any)
+			if !ok {
+				p.fail(pointer+"/headers", "headers must be an object of string values")
+			}
+			for k, hv := range hs {
+				s, ok := hv.(string)
+				if !ok {
+					p.fail(pointer+"/headers/"+k, "header values must be strings")
+					continue
+				}
+				if out.Headers == nil {
+					out.Headers = map[string]string{}
+				}
+				out.Headers[k] = s
+			}
+		}
 		if _, has := cfg["method"]; has {
 			m := p.str(pointer+"/method", cfg, "method", false, 10)
 			if !validHTTPMethods[m] {

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -112,6 +113,16 @@ func newChaosCmd() *cobra.Command {
 			if !sandbox.IsWebhookFaultKind(kind) && (rule.Method == "" || rule.Path == "") {
 				return errfmt.New("chaos needs a target operation", "pass --method and --path (the endpoint's path template)", "e.g. pikopod chaos "+sandboxName+" --kind error --status 503 --method POST --path /transaction", "")
 			}
+			if bodyArg, _ := cmd.Flags().GetString("body"); bodyArg != "" {
+				if rule.Kind != "error" {
+					return errfmt.New("--body only applies to error faults", fmt.Sprintf("a %s fault has no response body to carry", kind), "drop --body, or use --kind error --status <n>", "scenarios/README.md")
+				}
+				body, err := parseFaultBody(bodyArg)
+				if err != nil {
+					return err
+				}
+				rule.Body = body
+			}
 			resp, err := chaosClientReq(cfg, http.MethodPost, sandboxName, nil, rule)
 			if err != nil {
 				return err
@@ -128,6 +139,7 @@ func newChaosCmd() *cobra.Command {
 			return nil
 		}}
 	c.Flags().Bool("list", false, "show standing faults")
+	c.Flags().String("body", "", "JSON body an error fault answers with, inline or @file (default: the spec's declared example for that status, else none)")
 	c.Flags().Bool("clear", false, "clear matching faults (all when no --method/--path)")
 	c.Flags().String("kind", "error", "fault kind: "+strings.Join(sandbox.FaultKinds(), ", "))
 	c.Flags().String("event", "", "webhook event a webhook-kind fault matches (default: any)")
@@ -147,4 +159,29 @@ func chaosRelay(resp *http.Response, out io.Writer, verb string) error {
 	}
 	fmt.Fprintf(out, "%s: %s\n", verb, bytes.TrimSpace(raw))
 	return nil
+}
+
+func parseFaultBody(arg string) (json.RawMessage, error) {
+	raw := []byte(arg)
+	if strings.HasPrefix(arg, "@") {
+		data, err := os.ReadFile(strings.TrimPrefix(arg, "@"))
+		if err != nil {
+			return nil, errfmt.Newf("cannot read the --body file", "pass --body @<path> to a readable JSON file, or the JSON inline", "scenarios/README.md", "%v", err)
+		}
+		raw = data
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, errfmt.Newf("--body is not JSON", "pass a JSON object or array, inline or as @file", "scenarios/README.md", "%v", err)
+	}
+	switch value.(type) {
+	case map[string]any, []any:
+	default:
+		return nil, errfmt.New("--body must be a JSON object or array", "a provider's error body is a document, not a bare value", "wrap it, e.g. --body '{\"error\":{\"code\":\"card_declined\"}}'", "scenarios/README.md")
+	}
+	compact := &bytes.Buffer{}
+	if err := json.Compact(compact, raw); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(compact.Bytes()), nil
 }

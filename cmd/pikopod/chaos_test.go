@@ -5,9 +5,73 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestChaosArmsABodyOverTheControlPlane(t *testing.T) {
+	cfg := testConfig(t, "https://example.invalid")
+	if err := sandboxAdd(cfg, "widgets", widgetsSpecPath, "chaos-seed-2", "", "", false, io.Discard); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	sbx, err := newSandboxServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sbx.Close()
+	srv := httptest.NewServer(sbx)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/_pikopod/sandboxes/widgets/faults", "application/json",
+		strings.NewReader(`{"method":"POST","path":"/widgets","kind":"error","status":402,"body":{"error":{"code":"card_declined"}},"headers":{"x-request-id":"req_cp_1"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	armed, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 201 || !strings.Contains(string(armed), `"card_declined"`) {
+		t.Fatalf("arming with a body should 201 and echo it, got %d %s", resp.StatusCode, armed)
+	}
+
+	hit, err := http.Post(srv.URL+"/widgets/widgets", "application/json", strings.NewReader(`{"name":"x"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hit.Body.Close()
+	var body map[string]any
+	json.NewDecoder(hit.Body).Decode(&body)
+	if hit.StatusCode != 402 || body["error"].(map[string]any)["code"] != "card_declined" {
+		t.Fatalf("armed body must reach the client: %d %v", hit.StatusCode, body)
+	}
+	if hit.Header.Get("content-type") != "application/json; charset=utf-8" || hit.Header.Get("x-request-id") != "req_cp_1" {
+		t.Fatalf("armed headers must reach the client: %v", hit.Header)
+	}
+}
+
+func TestChaosBodyFlagReadsInlineJSONOrAFile(t *testing.T) {
+	inline, err := parseFaultBody(`{"error":{"code":"card_declined"}}`)
+	if err != nil || string(inline) != `{"error":{"code":"card_declined"}}` {
+		t.Fatalf("inline body: %s %v", inline, err)
+	}
+	path := t.TempDir() + "/decline.json"
+	if err := os.WriteFile(path, []byte("{\"error\": {\"code\": \"expired_card\"}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fromFile, err := parseFaultBody("@" + path)
+	if err != nil || !strings.Contains(string(fromFile), "expired_card") {
+		t.Fatalf("file body: %s %v", fromFile, err)
+	}
+	if _, err := parseFaultBody("not json"); err == nil {
+		t.Fatal("a body that is not JSON must be refused")
+	}
+	if _, err := parseFaultBody(`"declined"`); err == nil {
+		t.Fatal("a body that is not an object or array must be refused")
+	}
+	if _, err := parseFaultBody("@" + t.TempDir() + "/missing.json"); err == nil {
+		t.Fatal("a missing file must be refused")
+	}
+}
 
 func TestChaosAdminSurface(t *testing.T) {
 	cfg := testConfig(t, "https://example.invalid")

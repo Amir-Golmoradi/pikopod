@@ -112,6 +112,9 @@ func BuildFromRecord(ev *alert.DriftEvent, rec *proxy.Record, contractVersion in
 	fault["method"] = rec.Method
 	fault["path"] = ev.Endpoint
 	fault["times"] = 1
+	if body, ok := recordedResponseBody(rec); ok && fault["kind"] == "error" {
+		fault["body"] = body
+	}
 
 	steps := []any{
 		map[string]any{
@@ -162,6 +165,10 @@ func provenanceNote(ev *alert.DriftEvent, rec *proxy.Record) string {
 			"before it reached disk, so the body is not byte-identical to the one that failed.",
 		ev.Fingerprint, ev.Upstream, rec.Status, rec.Method, ev.Endpoint,
 		ev.FirstSeen.Format("2006-01-02T15:04:05Z07:00"))
+	if _, ok := recordedResponseBody(rec); ok && ev.Kind != drift.UpstreamUnreachable && ev.Kind != drift.RateLimited {
+		base += " The armed fault answers with the recorded response body, redacted the same way, " +
+			"so code that switches on the provider's error body meets what the provider sent."
+	}
 	if ev.Kind == drift.ClientError {
 		return base + " THIS MATTERS HERE: a 4xx is usually caused by the request body, and " +
 			"the body below is the redacted one. If this scenario does not reproduce the " +
@@ -176,6 +183,17 @@ func replayBody(rec *proxy.Record) (any, bool) {
 	}
 	if m, ok := rec.ReqBody.(map[string]any); ok {
 		return m, true
+	}
+	return nil, false
+}
+
+func recordedResponseBody(rec *proxy.Record) (any, bool) {
+	if rec.RespKind != "json" || rec.RespBody == nil {
+		return nil, false
+	}
+	switch rec.RespBody.(type) {
+	case map[string]any, []any:
+		return rec.RespBody, true
 	}
 	return nil, false
 }

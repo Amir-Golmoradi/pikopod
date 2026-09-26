@@ -95,6 +95,16 @@ func errorSchema(endpoint *ir.Endpoint, status int) *ir.IrSchemaNode {
 	return nil
 }
 
+func errorResponseDef(endpoint *ir.Endpoint, status int) *ir.ResponseDef {
+	code := strconv.Itoa(status)
+	for i := range endpoint.Responses {
+		if endpoint.Responses[i].StatusCode == code {
+			return &endpoint.Responses[i]
+		}
+	}
+	return nil
+}
+
 func jsonResponse(status int, value any, extraHeaders map[string]string) *RawResponse {
 	headers := map[string]string{}
 	for k, v := range extraHeaders {

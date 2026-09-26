@@ -231,6 +231,39 @@ func TestPathFitsTemplate(t *testing.T) {
 	}
 }
 
+func TestClientErrorArmsTheRecordedResponseBody(t *testing.T) {
+	recorded := map[string]any{"error": map[string]any{"code": "card_declined", "message": "<<SUBSTITUTE:free_text>>"}}
+	rec := &proxy.Record{TS: time.Now(), Method: "POST", Path: "/charges", Status: 402,
+		ReqKind: "json", ReqBody: map[string]any{"amount": float64(5000)},
+		RespKind: "json", RespBody: recorded}
+	ev := incidentEvent(drift.ClientError, "/charges", "402")
+	ev.StatusClass = "4xx"
+
+	_, pack, err := BuildFromRecord(ev, rec, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fault := stepOfType(t, pack, "INJECT_FAULT")["config"].(map[string]any)
+	got, _ := json.Marshal(fault["body"])
+	want, _ := json.Marshal(recorded)
+	if string(got) != string(want) {
+		t.Fatalf("armed body must be the recorded response and nothing else:\n got %s\nwant %s", got, want)
+	}
+	note := stepOfType(t, pack, "NOTE")["config"].(map[string]any)["text"].(string)
+	if !strings.Contains(note, "recorded response body") {
+		t.Fatalf("note does not say the fault answers with the recorded body: %q", note)
+	}
+
+	noBody := &proxy.Record{TS: time.Now(), Method: "POST", Path: "/charges", Status: 402, RespKind: "text", RespBody: "declined"}
+	_, pack, err = BuildFromRecord(ev, noBody, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, has := stepOfType(t, pack, "INJECT_FAULT")["config"].(map[string]any)["body"]; has {
+		t.Fatal("a non-JSON recording must not be armed as a body")
+	}
+}
+
 func TestClientErrorNoteWarnsThatTheBodyIsRedacted(t *testing.T) {
 	rec := &proxy.Record{TS: time.Now(), Method: "POST", Path: "/charges", Status: 422,
 		ReqKind: "json", ReqBody: map[string]any{"amount": float64(5000)}}
