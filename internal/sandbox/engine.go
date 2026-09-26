@@ -266,6 +266,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entry.AtMs = e.virtualClockMs
+	entry.WallMs = started.UnixMilli()
 	entry.Headers, entry.HeadersTruncated = e.journalHeaders(req.headers)
 	entry.Query, entry.QueryTruncated = e.journalQuery(req.query)
 	e.journal.record(entry)

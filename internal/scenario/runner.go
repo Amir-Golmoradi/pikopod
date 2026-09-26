@@ -59,6 +59,11 @@ type stepOutcome struct {
 	intrinsicChecks int
 }
 
+type RunOptions struct {
+	Subjects      []string
+	WallClockGaps bool
+}
+
 type runner struct {
 	eng            Target
 	seed           string
@@ -69,6 +74,15 @@ type runner struct {
 	virtualClockMs int64
 	seedCounter    int
 	faultCounter   int
+	subjects       []string
+	wallGaps       bool
+}
+
+func (r *runner) entryAt(entry *sandbox.JournalEntry) int64 {
+	if r.wallGaps {
+		return entry.WallMs
+	}
+	return entry.AtMs
 }
 
 func (r *runner) tpl() *TemplateContext {
@@ -120,9 +134,17 @@ func ResolveInputs(def *ScenarioDefinition, provided map[string]any) (map[string
 }
 
 func Run(eng Target, def *ScenarioDefinition, provided map[string]any, seed string) (*RunResult, error) {
+	return RunWith(eng, def, provided, seed, RunOptions{Subjects: subjectsPresent})
+}
+
+func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed string, opts RunOptions) (*RunResult, error) {
 	inputs, err := ResolveInputs(def, provided)
 	if err != nil {
 		return nil, err
+	}
+	subjects := opts.Subjects
+	if len(subjects) == 0 {
+		subjects = subjectsPresent
 	}
 
 	startClock := eng.VirtualClockMs()
@@ -134,6 +156,8 @@ func Run(eng Target, def *ScenarioDefinition, provided map[string]any, seed stri
 		captures:       map[string]any{},
 		defaults:       def.Defaults,
 		virtualClockMs: startClock,
+		subjects:       subjects,
+		wallGaps:       opts.WallClockGaps,
 	}
 
 	res := &RunResult{Steps: make([]StepResult, 0, len(def.Steps))}
@@ -180,7 +204,7 @@ func Run(eng Target, def *ScenarioDefinition, provided map[string]any, seed stri
 	}
 
 	res.NotEvaluated = notEvaluated
-	res.ResultHash = resultHash(def, seed, stepHashes)
+	res.ResultHash = resultHash(def, seed, r.subjects, stepHashes)
 	switch {
 	case hardFailedAt >= 0 && hardStatus == StatusErrored:
 		res.Status = RunErrored
@@ -198,10 +222,10 @@ func Run(eng Target, def *ScenarioDefinition, provided map[string]any, seed stri
 	return res, nil
 }
 
-func resultHash(def *ScenarioDefinition, seed string, stepHashes []string) string {
+func resultHash(def *ScenarioDefinition, seed string, subjects []string, stepHashes []string) string {
 	defJSON, _ := json.Marshal(def)
 	defHash := sha256.Sum256(defJSON)
-	parts := append([]string{hex.EncodeToString(defHash[:]), EngineVersion, seed, strings.Join(subjectsPresent, ",")}, stepHashes...)
+	parts := append([]string{hex.EncodeToString(defHash[:]), EngineVersion, seed, strings.Join(subjects, ",")}, stepHashes...)
 	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return hex.EncodeToString(sum[:])
 }
@@ -356,7 +380,7 @@ func (r *runner) request(step *Step) (stepOutcome, error) {
 		LatencyMs:    latencyMs,
 		FaultApplied: faultApplied,
 	}
-	verdict := EvaluateStepAssertions(step.Assertions, docs, subjectsPresent)
+	verdict := EvaluateStepAssertions(step.Assertions, docs, r.subjects)
 
 	summary := fmt.Sprintf("%s %s → %d", cfg.Method, path, status)
 	if verdict.FirstFailure != nil {
@@ -418,7 +442,7 @@ func (r *runner) expectWebhook(step *Step) (stepOutcome, error) {
 			return stepOutcome{}, err
 		}
 	}
-	verdict := EvaluateStepAssertions(step.Assertions, &EvalDocs{WebhookDeliveries: payloads, HasWebhooks: true}, subjectsPresent)
+	verdict := EvaluateStepAssertions(step.Assertions, &EvalDocs{WebhookDeliveries: payloads, HasWebhooks: true}, r.subjects)
 
 	summary := fmt.Sprintf("observed %d webhook delivery(ies)", len(payloads))
 	if eventType != "" {
@@ -619,7 +643,7 @@ func (r *runner) verifyRequests(step *Step) (stepOutcome, error) {
 		docs.LastRequestQuery = queryDoc(last.Query)
 		docs.LastRequestCaptured = !last.HeadersTruncated && !last.QueryTruncated
 	}
-	verdict := EvaluateStepAssertions(step.Assertions, docs, subjectsPresent)
+	verdict := EvaluateStepAssertions(step.Assertions, docs, r.subjects)
 	summary := fmt.Sprintf("sandbox received %d request(s) matching %s %s", count, cfg.Method, path)
 	if verdict.FirstFailure != nil {
 		summary = verdict.FirstFailure.Message
@@ -659,7 +683,7 @@ func (r *runner) assertState(step *Step) (stepOutcome, error) {
 			return stepOutcome{}, err
 		}
 	}
-	verdict := EvaluateStepAssertions(step.Assertions, &EvalDocs{State: state, StateFound: found}, subjectsPresent)
+	verdict := EvaluateStepAssertions(step.Assertions, &EvalDocs{State: state, StateFound: found}, r.subjects)
 	summary := fmt.Sprintf("%s/%s not found", typ, key)
 	if found {
 		summary = fmt.Sprintf("read state of %s/%s", typ, key)
@@ -761,13 +785,14 @@ func (r *runner) verifySequence(step *Step) (stepOutcome, error) {
 			if !entry.MatchesSequence(sandbox.SequenceFields{Method: m.Method, Headers: m.Headers, Query: m.Query}, path) {
 				continue
 			}
-			if reason := gapViolation(m, entry.AtMs, prevAtMs, matchedAny); reason != "" {
+			at := r.entryAt(entry)
+			if reason := gapViolation(m, at, prevAtMs, matchedAny); reason != "" {
 				return r.failedVerification(step, fmt.Sprintf("matcher %d matched %s %s but %s", mi, entry.Method, entry.Path, reason)), nil
 			}
 			if reason := unprovable(m, entry); reason != "" {
 				return r.failedVerification(step, fmt.Sprintf("matcher %d cannot be proved: %s", mi, reason)), nil
 			}
-			prevAtMs, matchedAny, found = entry.AtMs, true, true
+			prevAtMs, matchedAny, found = at, true, true
 			idx++
 			break
 		}

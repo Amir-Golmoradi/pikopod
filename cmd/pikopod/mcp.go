@@ -507,6 +507,31 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			return toolResult{Verdict: VerdictClean, Data: body}, nil
 		}})
 
+	s.Register(mcp.Tool{Name: "mode_verify", Annotations: readOnly(),
+		Description: "After the caller's own tests ran against a RUNNING sandbox in a mode, check what they sent against the scenario's verification steps (request order and spacing, webhook counts, stored state). CLEAN when every step passed, FINDINGS when the client did not do what the scenario expects, ERROR when no mode is set or a step could not run. This is the only tool that judges the caller's code rather than the sandbox.",
+		InputSchema: schema([]string{"sandbox"}, map[string]any{"sandbox": prop("string", "sandbox name")}),
+		Handler: func(_ context.Context, raw json.RawMessage) (any, error) {
+			var args struct {
+				Sandbox string `json:"sandbox"`
+			}
+			if err := decodeArgs(raw, &args); err != nil {
+				return nil, err
+			}
+			body, err := controlCall(cfg, http.MethodPost, args.Sandbox, "mode/verify", nil)
+			if err != nil {
+				return nil, err
+			}
+			result, _ := body["result"].(map[string]any)
+			status, _ := result["status"].(string)
+			switch status {
+			case scenario.RunPassed:
+				return toolResult{Verdict: VerdictClean, Data: body}, nil
+			case scenario.RunErrored:
+				return toolResult{Verdict: VerdictError, Data: body, Error: &toolError{What: "mode verify errored", Why: "a verification step could not run", Fix: "fix the scenario or sandbox and retry", Docs: "docs/exit-codes.md"}}, nil
+			}
+			return toolResult{Verdict: VerdictFindings, Data: body}, nil
+		}})
+
 	s.Register(mcp.Tool{Name: "clear_mode", Annotations: controlsFake(),
 		Description: "Clear the standing mode on a RUNNING sandbox and every fault it armed, returning it to baseline behaviour.",
 		InputSchema: schema([]string{"sandbox"}, map[string]any{"sandbox": prop("string", "sandbox name")}),

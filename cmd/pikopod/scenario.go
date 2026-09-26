@@ -259,14 +259,7 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		mark := map[string]string{
-			scenario.RunPassed: "✓", scenario.RunFailed: "✗",
-			scenario.RunConditionGenerated: "○", scenario.RunErrored: "!",
-		}[res.Status]
-		fmt.Fprintf(out, "%s %s — %s (%s)\n", mark, name, res.Status, res.Summary)
-		for _, s := range res.Steps {
-			fmt.Fprintf(out, "    %-14s %-16s %s\n", s.Status, s.Key, s.Summary)
-		}
+		writeRunResult(out, name, res)
 		if sink != nil {
 			fmt.Fprintf(out, "    sink: %d delivered, %d failed to %s\n", sink.Delivered, sink.Failed, entry.WebhookURL)
 			if sink.LastError != "" {
@@ -289,6 +282,17 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+func writeRunResult(out io.Writer, name string, res *scenario.RunResult) {
+	mark := map[string]string{
+		scenario.RunPassed: "✓", scenario.RunFailed: "✗",
+		scenario.RunConditionGenerated: "○", scenario.RunErrored: "!",
+	}[res.Status]
+	fmt.Fprintf(out, "%s %s — %s (%s)\n", mark, name, res.Status, res.Summary)
+	for _, s := range res.Steps {
+		fmt.Fprintf(out, "    %-14s %-16s %s\n", s.Status, s.Key, s.Summary)
+	}
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)

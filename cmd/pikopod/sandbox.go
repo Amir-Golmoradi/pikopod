@@ -626,7 +626,8 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 
 	admin := len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks")
 	emit := len(parts) == 5 && parts[3] == "webhooks" && parts[4] == "emit"
-	if len(parts) < 4 || parts[1] != "sandboxes" || (!admin && !emit) {
+	verify := len(parts) == 5 && parts[3] == "mode" && parts[4] == "verify"
+	if len(parts) < 4 || parts[1] != "sandboxes" || (!admin && !emit && !verify) {
 		writeSandboxJSONError(w, http.StatusNotFound, "Not Found")
 		return
 	}
@@ -643,6 +644,10 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json; charset=utf-8")
 	if emit {
 		s.serveWebhookEmit(w, r, engine)
+		return
+	}
+	if verify {
+		s.serveModeVerify(w, r, parts[2], engine)
 		return
 	}
 	if parts[3] == "mode" {

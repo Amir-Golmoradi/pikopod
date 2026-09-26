@@ -30,6 +30,14 @@ const extensionsJSON = `[
         "key": "attempt3", "type": "REQUEST",
         "config": { "method": "<<createOp.method>>", "path": "<<createOp.collectionPath>>", "body": {}, "headers": { "Idempotency-Key": "retry-storm-1" } },
         "assertions": [{ "subject": "SANDBOX", "target": "response.status", "op": "gte", "expected": 200 }, { "subject": "SANDBOX", "target": "response.status", "op": "lt", "expected": 300 }]
+      },
+      {
+        "key": "storm-shape", "type": "VERIFY_SEQUENCE",
+        "config": { "requests": [
+          { "method": "<<createOp.method>>", "path": "<<createOp.collectionPath>>" },
+          { "method": "<<createOp.method>>", "path": "<<createOp.collectionPath>>" },
+          { "method": "<<createOp.method>>", "path": "<<createOp.collectionPath>>" }
+        ] }
       }
     ]
   },
