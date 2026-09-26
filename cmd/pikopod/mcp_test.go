@@ -73,7 +73,7 @@ func listTools(t *testing.T, cfg *config.Config) []string {
 
 func TestMCPToolListIsReadersAndFakeControlsOnly(t *testing.T) {
 	names := listTools(t, testConfig(t, "https://example.invalid"))
-	want := []string{"arm_fault", "clear_faults", "clear_mode", "conformance", "drift_events", "emit_webhook", "get_requests", "replay_ci", "reproduce", "scenario_list", "scenario_run", "set_mode", "spec_diff"}
+	want := []string{"arm_fault", "clear_faults", "clear_mode", "conformance", "drift_events", "emit_webhook", "get_requests", "mode_verify", "replay_ci", "reproduce", "scenario_list", "scenario_run", "set_mode", "spec_diff"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools:\n got %v\nwant %v", names, want)
 	}

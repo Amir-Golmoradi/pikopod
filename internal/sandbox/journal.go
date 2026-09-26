@@ -32,7 +32,8 @@ type JournalEntry struct {
 	Query          map[string][]string `json:"query,omitempty"`
 	QueryTruncated bool                `json:"queryTruncated,omitempty"`
 
-	AtMs int64 `json:"atMs"`
+	AtMs   int64 `json:"atMs"`
+	WallMs int64 `json:"wallMs"`
 }
 
 type journal struct {

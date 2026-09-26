@@ -82,3 +82,28 @@ func (s *sandboxServer) serveMode(w http.ResponseWriter, r *http.Request, name s
 		writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
 	}
 }
+
+func (s *sandboxServer) serveModeVerify(w http.ResponseWriter, r *http.Request, name string, engine *sandbox.Engine) {
+	if r.Method != http.MethodPost {
+		writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		return
+	}
+	s.mu.Lock()
+	spec := s.modes[name]
+	s.mu.Unlock()
+	if spec == nil {
+		writeSandboxJSONError(w, http.StatusConflict, "no mode set on "+name+": enter one with `pikopod mode set "+name+" <scenario>`, run your tests, then verify")
+		return
+	}
+	entry, _, err := loadSandboxDef(s.cfg, name)
+	if err != nil {
+		writeSandboxJSONError(w, http.StatusNotFound, "unknown sandbox "+name)
+		return
+	}
+	res, err := mode.Verify(engine, spec, entry.Seed)
+	if err != nil {
+		writeSandboxJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]any{"result": res, "mode": spec.Name})
+}

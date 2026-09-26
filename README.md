@@ -147,10 +147,24 @@ pikopod scenario run examplepay declines retry_storm
     PASSED         attempt3         POST /charges → 201
 ```
 
-`pikopod scenario list examplepay` shows every story that bound and, for any
-that did not, which fact in the spec was missing. `pikopod up` serves the
-sandbox on `:4600/examplepay` so your own tests meet the same failures, and
-`pikopod chaos` arms one fault directly. See [Faults](https://docs.pikopod.com/sandbox/faults).
+That proves the sandbox fails the way the story says. To prove your own code
+survives it, serve the sandbox with `pikopod up`, put it into the story's
+standing state, run your tests against `:4600/examplepay`, then ask:
+
+```bash
+pikopod mode set examplepay retry_storm
+pikopod mode verify examplepay
+```
+
+```
+✓ retry_storm — PASSED (3 assertion(s) passed; 0 not evaluated)
+    PASSED         storm-shape      3 matcher(s) matched in order
+```
+
+`verify` reads what your client actually sent and exits `1` when it fell
+short, so it can sit in CI next to your test suite. `pikopod chaos` arms one
+fault directly. See [Modes](https://docs.pikopod.com/sandbox/modes) and
+[Faults](https://docs.pikopod.com/sandbox/faults).
 
 ## Observe and reproduce
 

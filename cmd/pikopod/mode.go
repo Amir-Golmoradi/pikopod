@@ -8,12 +8,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/pikopod/pikopod/internal/config"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/mode"
+	"github.com/pikopod/pikopod/internal/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -164,6 +166,51 @@ never a provider. Binding a non-loopback address requires a token.`}
 			return nil
 		}}
 
-	c.AddCommand(set, show, clear)
+	verify := &cobra.Command{Use: "verify <sandbox>", Short: "Check what your tests sent against the standing scenario's verification steps (exit 0 pass / 1 fail / 2 error)", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			resp, err := adminReq(cfg, http.MethodPost, args[0], "mode/verify", nil)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+			if resp.StatusCode >= 400 {
+				var body struct {
+					Message string `json:"message"`
+				}
+				json.Unmarshal(raw, &body)
+				if body.Message == "" {
+					body.Message = string(bytes.TrimSpace(raw))
+				}
+				if resp.StatusCode == http.StatusConflict {
+					return errfmt.New("no mode set on "+args[0], "nothing is armed, so there is nothing to verify against", "enter one with `pikopod mode set "+args[0]+" <scenario>`, run your tests, then verify", "scenarios/README.md")
+				}
+				why, _, _ := strings.Cut(body.Message, " → ")
+				return errfmt.New("the sandbox could not verify", why, "run `pikopod mode show "+args[0]+"` to see what is armed", "scenarios/README.md")
+			}
+			var body struct {
+				Mode   string             `json:"mode"`
+				Result scenario.RunResult `json:"result"`
+			}
+			if err := json.Unmarshal(raw, &body); err != nil {
+				return errfmt.Newf("the sandbox answered strangely", "retry", "", "%v", err)
+			}
+			out := cmd.OutOrStdout()
+			writeRunResult(out, body.Mode, &body.Result)
+			switch body.Result.Status {
+			case scenario.RunErrored:
+				return errfmt.New("mode verify errored", "a verification step could not run (see the ! line above)", "fix the scenario or sandbox and retry", "docs/exit-codes.md")
+			case scenario.RunFailed:
+				fmt.Fprintln(out, "\nyour client did not do what the scenario expects — exit 1")
+				os.Exit(1)
+			}
+			return nil
+		}}
+
+	c.AddCommand(set, show, clear, verify)
 	return c
 }

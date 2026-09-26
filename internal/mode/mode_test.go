@@ -83,6 +83,33 @@ func TestCompileKeepsTimesWindowFromTheRule(t *testing.T) {
 	}
 }
 
+func TestCompileKeepsVerificationStepsForVerify(t *testing.T) {
+	def := loadIR(t, "stripe.trimmed.json")
+	spec, err := compileArchetype(t, def, "retry_storm")
+	if err != nil {
+		t.Fatalf("retry_storm: %v", err)
+	}
+	if spec.Verify == nil || len(spec.Verify.Steps) != 1 {
+		t.Fatalf("retry_storm must keep one verification step, got %+v", spec.Verify)
+	}
+	if spec.Verify.Steps[0].Key != "storm-shape" || spec.Verify.Steps[0].Type != "VERIFY_SEQUENCE" {
+		t.Fatalf("kept %s %s, want storm-shape VERIFY_SEQUENCE", spec.Verify.Steps[0].Key, spec.Verify.Steps[0].Type)
+	}
+	if !strings.Contains(spec.Describe(), "verify  1 step") {
+		t.Fatalf("Describe should mention verification:\n%s", spec.Describe())
+	}
+	if _, err := Verify(nil, nil, "seed"); err == nil || !strings.Contains(err.Error(), "no mode set") {
+		t.Fatalf("Verify without a mode should refuse, got %v", err)
+	}
+	declines, err := compileArchetype(t, def, "declines")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Verify(nil, declines, "seed"); err == nil || !strings.Contains(err.Error(), "nothing to verify") {
+		t.Fatalf("declines has no verification steps and should say so, got %v", err)
+	}
+}
+
 func TestDescribeNamesWhatIsArmed(t *testing.T) {
 	def := loadIR(t, "stripe.trimmed.json")
 	spec, err := compileArchetype(t, def, "declines")
