@@ -3,6 +3,7 @@ package sandbox
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -30,6 +31,10 @@ type FaultRule struct {
 	Per string `json:"per,omitempty"`
 
 	Delay *DelayDistribution `json:"delayDistribution,omitempty"`
+
+	Body json.RawMessage `json:"body,omitempty"`
+
+	Headers map[string]string `json:"headers,omitempty"`
 
 	consumed map[string]int
 
@@ -371,7 +376,7 @@ func (e *Engine) evaluateFaults(endpoint *ir.Endpoint, req *ingressRequest, inne
 					status = 500
 				}
 
-				out.errResp = &RawResponse{Status: status, Headers: map[string]string{}, Body: nil}
+				out.errResp = e.armedErrorResponse(endpoint, f, status)
 
 				if status == http.StatusTooManyRequests {
 					out.errResp.Headers["retry-after"] = strconv.Itoa(RateLimitRetryAfterSec)
@@ -424,6 +429,27 @@ func (e *Engine) evaluateFaults(endpoint *ir.Endpoint, req *ingressRequest, inne
 		out.slowBodyMs = maxFaultDelayMs
 	}
 	return out
+}
+
+func (e *Engine) armedErrorResponse(endpoint *ir.Endpoint, f *FaultRule, status int) *RawResponse {
+	resp := &RawResponse{Status: status, Headers: map[string]string{}, Body: nil}
+	switch {
+	case len(f.Body) > 0:
+		resp.Body = append([]byte(nil), f.Body...)
+		resp.Headers["content-type"] = jsonContentType
+		e.tracef("faults", "error %d answers with the armed body", status)
+	default:
+		if def := errorResponseDef(endpoint, status); def != nil {
+			if value, ok := e.declaredExample(def.ID); ok {
+				resp = jsonResponse(status, value, nil)
+				e.tracef("faults", "error %d answers with the declared example", status)
+			}
+		}
+	}
+	for k, v := range f.Headers {
+		resp.Headers[strings.ToLower(k)] = v
+	}
+	return resp
 }
 
 func (e *Engine) faultFires(f *FaultRule, index int, method, innerPath string, probability float64) bool {

@@ -551,17 +551,19 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 
 	s.Register(mcp.Tool{Name: "arm_fault", Annotations: controlsFake(),
 		Description: "Arm one fault on a RUNNING sandbox: error (with status), latency, hang, slow_body, rate_limit, connection_reset, empty_response, random_data_then_close, malformed_response, wrong_content_length, or a webhook fault (duplicate_webhook, drop_webhook, reorder_webhook, delay_webhook, matched by event). HTTP faults need method and path template; webhook faults do not. Stands until clear_faults. Controls a local fake, never a provider.",
-		InputSchema: schema([]string{"sandbox", "kind"}, map[string]any{"sandbox": prop("string", "sandbox name"), "kind": prop("string", strings.Join(sandbox.FaultKinds(), " | ")), "method": prop("string", "HTTP method of the target operation"), "path": prop("string", "path template as in the spec"), "status": prop("integer", "status for kind=error (default 500)"), "event": prop("string", "webhook event for webhook kinds (default any)"), "probability": prop("number", "0..1 (default 1)"), "delay_ms": prop("integer", "for latency / delay_webhook")}),
+		InputSchema: schema([]string{"sandbox", "kind"}, map[string]any{"sandbox": prop("string", "sandbox name"), "kind": prop("string", strings.Join(sandbox.FaultKinds(), " | ")), "method": prop("string", "HTTP method of the target operation"), "path": prop("string", "path template as in the spec"), "status": prop("integer", "status for kind=error (default 500)"), "event": prop("string", "webhook event for webhook kinds (default any)"), "probability": prop("number", "0..1 (default 1)"), "delay_ms": prop("integer", "for latency / delay_webhook"), "body": prop("object", "JSON body an error fault answers with (default: the spec's declared example for that status, else none)"), "headers": prop("object", "response headers an error fault adds")}),
 		Handler: func(_ context.Context, raw json.RawMessage) (any, error) {
 			var args struct {
-				Sandbox     string  `json:"sandbox"`
-				Kind        string  `json:"kind"`
-				Method      string  `json:"method"`
-				Path        string  `json:"path"`
-				Status      int     `json:"status"`
-				Event       string  `json:"event"`
-				Probability float64 `json:"probability"`
-				DelayMs     int64   `json:"delay_ms"`
+				Sandbox     string            `json:"sandbox"`
+				Kind        string            `json:"kind"`
+				Method      string            `json:"method"`
+				Path        string            `json:"path"`
+				Status      int               `json:"status"`
+				Event       string            `json:"event"`
+				Probability float64           `json:"probability"`
+				DelayMs     int64             `json:"delay_ms"`
+				Body        json.RawMessage   `json:"body"`
+				Headers     map[string]string `json:"headers"`
 			}
 			if err := decodeArgs(raw, &args); err != nil {
 				return nil, err
@@ -575,8 +577,14 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			if args.Probability == 0 {
 				args.Probability = 1
 			}
-			rule := sandbox.FaultRule{Method: strings.ToUpper(args.Method), Path: args.Path, Probability: args.Probability, Event: args.Event, DelayMs: args.DelayMs}
+			rule := sandbox.FaultRule{Method: strings.ToUpper(args.Method), Path: args.Path, Probability: args.Probability, Event: args.Event, DelayMs: args.DelayMs, Headers: args.Headers}
 			rule.Kind, rule.Status = sandbox.ResolveFaultKind(args.Kind, args.Status)
+			if len(args.Body) > 0 && string(args.Body) != "null" {
+				if rule.Kind != "error" {
+					return nil, errfmt.New("body only applies to error faults", fmt.Sprintf("a %s fault has no response body to carry", args.Kind), "drop body, or use kind=error with a status", "scenarios/README.md")
+				}
+				rule.Body = args.Body
+			}
 			if args.Kind == "latency" && rule.DelayMs == 0 {
 				rule.DelayMs = 30000
 			}

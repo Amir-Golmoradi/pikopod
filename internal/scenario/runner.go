@@ -509,6 +509,17 @@ func FaultRuleFor(cfg *InjectFaultConfig, id string) (rule sandbox.FaultRule, ok
 	if dd := cfg.DelayDistribution; dd != nil {
 		rule.Delay = delayDistributionFromConfig(dd)
 	}
+	if cfg.Body != nil {
+		if raw, err := json.Marshal(cfg.Body); err == nil {
+			rule.Body = raw
+		}
+	}
+	if len(cfg.Headers) > 0 {
+		rule.Headers = map[string]string{}
+		for k, v := range cfg.Headers {
+			rule.Headers[k] = v
+		}
+	}
 	return rule, true
 }
 

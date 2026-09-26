@@ -173,7 +173,7 @@ type-specific lives under `config`:
 | `REQUEST` | `method`, `path` (sandbox-relative), `headers`, `query`, `body` |
 | `WAIT` | `durationMs` (virtual time) |
 | `EXPECT_WEBHOOK` | `match`, `timeoutMs` |
-| `INJECT_FAULT` | `kind`, `method`, `path`, `status`, `delayMs`, `probability`, `target`, `wallclock`, `times`, `per`, `delayDistribution` |
+| `INJECT_FAULT` | `kind`, `method`, `path`, `status`, `delayMs`, `probability`, `target`, `wallclock`, `times`, `per`, `delayDistribution`, `body`, `headers` |
 | `CLEAR_FAULT` | `method`, `path` |
 | `VERIFY_REQUESTS` | `path`, `method` |
 | `VERIFY_SEQUENCE` | `requests` (ordered matchers) |
