@@ -70,7 +70,7 @@ func newAckCmd() *cobra.Command {
 					fmt.Fprintf(out, "acked %s — silenced until its diff changes (a changed diff is a new fingerprint)\n", fp)
 					return nil
 				case http.StatusNotFound:
-					return errfmt.New("unknown fingerprint", fp+" is not in the alerter's state", "copy the fp_… from the alert message, or see `pikopod status`", "docs/config-reference.md#alerts")
+					return errfmt.New("unknown fingerprint", fp+" is not in the alerter's state", "copy the fp_… from the alert message, or see `pikopod agent status`", "docs/config-reference.md#alerts")
 				default:
 					return errfmt.New("agent refused the ack", fmt.Sprintf("it answered %d", resp.StatusCode), "check the token configuration", "docs/config-reference.md#listen")
 				}

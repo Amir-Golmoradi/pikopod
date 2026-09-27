@@ -48,7 +48,7 @@ func TestIncidentsExportWritesABundleWithoutSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rows, "reproducible until 2026-01-04T00:00:00Z") || !strings.Contains(rows, "export: pikopod incidents export fp_bundlecli01") {
+	if !strings.Contains(rows, "reproducible until 2026-01-04T00:00:00Z") || !strings.Contains(rows, "export: pikopod agent incidents export fp_bundlecli01") {
 		t.Fatalf("rows must carry the deadline and the export hint:\n%s", rows)
 	}
 	arr, err := runCLI(t, newIncidentsCmd(), "export", "--since", "24h")

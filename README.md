@@ -173,11 +173,11 @@ fault directly. See [Modes](https://docs.pikopod.com/sandbox/modes) and
 app's provider base URL at it, keeping your real credentials; it forwards
 everything untouched and watches. Incidents fire from the first request. Drift
 waits 50 samples and 48 hours per endpoint, because a baseline built from five
-responses has not seen your optional fields yet. `pikopod incidents` lists
+responses has not seen your optional fields yet. `pikopod agent incidents` lists
 what failed, newest first, each with a fingerprint:
 
 ```bash
-pikopod scenario reproduce fp_14835fa32dfb
+pikopod reproduce fp_14835fa32dfb
 ```
 
 ```
@@ -187,7 +187,7 @@ the failure now happens locally — fix it, then re-run: pikopod scenario check 
 ```
 
 The generated pack is an ordinary scenario: commit it and it guards that path
-forever. `pikopod replay --ci` then gates every build on recorded traffic, with
+forever. `pikopod agent replay --ci` then gates every build on recorded traffic, with
 no network and no provider account. For a shape change rather than a failure,
 `pikopod scenario from-drift <fp>` pins the old contract instead. See
 [Drift](https://docs.pikopod.com/observe/drift) and [Replay gate](https://docs.pikopod.com/observe/replay-gate).

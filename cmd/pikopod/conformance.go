@@ -75,7 +75,7 @@ func newConformanceCmd() *cobra.Command {
 				fmt.Fprintf(out, "  %-7s %-9s %s %s %d  %-24s %s (%d occurrence(s))\n",
 					strings.ToUpper(v.Severity), v.Code, v.Method, v.Template, v.Status, loc, v.Message, v.Occurrences)
 			}
-			fmt.Fprintln(out, "\nthese are SPEC-relative findings; `pikopod contract` shows what traffic has taught the sandbox instead")
+			fmt.Fprintln(out, "\nthese are SPEC-relative findings; `pikopod agent contract` shows what traffic has taught the sandbox instead")
 			if strict && errors > 0 {
 				fmt.Fprintf(out, "%d error-severity violation(s) — failing (--strict, exit 1)\n", errors)
 				os.Exit(1)

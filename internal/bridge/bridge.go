@@ -33,7 +33,7 @@ func FindEvent(dataDir, fingerprint string) (*alert.DriftEvent, error) {
 		}
 	}
 	if found == nil {
-		return nil, errfmt.New("unknown fingerprint", fingerprint+" is not in the event log", "copy the fp_… from the alert message, or see `pikopod status`", "docs/config-reference.md#alerts")
+		return nil, errfmt.New("unknown fingerprint", fingerprint+" is not in the event log", "copy the fp_… from the alert message, or see `pikopod agent status`", "docs/config-reference.md#alerts")
 	}
 	return found, nil
 }

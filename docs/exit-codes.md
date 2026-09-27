@@ -5,7 +5,7 @@ Exit codes are API. Script against them.
 | Code | Meaning | Who scripts against it |
 |------|---------|------------------------|
 | `0` | Clean — no drift found | CI passes |
-| `1` | The check ran and failed: drift found, assertions failed, or the provider violated its own spec (`pikopod replay --ci`, `pikopod spec-diff`, `pikopod scenario check`, `pikopod scenario from-drift`, and `pikopod conformance` **with `--strict`**) | CI fails the build on provider drift |
+| `1` | The check ran and failed: drift found, assertions failed, or the provider violated its own spec (`pikopod agent replay --ci`, `pikopod spec-diff`, `pikopod scenario check`, `pikopod scenario from-drift`, and `pikopod agent conformance` **with `--strict`**) | CI fails the build on provider drift |
 | `2` | pikopod or configuration error (bad YAML, refused bind, missing config, a result pikopod cannot verify) | Distinguishes "provider changed" from "tool misconfigured" — never conflate these in CI |
 
 The separation between `1` and `2` is the point. A build that fails because
@@ -20,13 +20,13 @@ when its impact scan finds nothing, because a literal scan cannot distinguish
 
 ## Readers vs gates
 
-`pikopod incidents` is a **reader**, not a gate: it exits `0` whether or not it
+`pikopod agent incidents` is a **reader**, not a gate: it exits `0` whether or not it
 found anything, and exits `2` only when it cannot read the event log. Nothing
 about "I found incidents" is an exit-code signal — script against
 `--format json` instead, where `total_matching` and `truncated` are always
 present so a shortened list can never be mistaken for a clean one.
 
-`pikopod scenario reproduce` exits `0` when it writes a pack and `2` when it
+`pikopod reproduce` exits `0` when it writes a pack and `2` when it
 refuses — when the incident's recording has aged out of retention, or when the
 pack ran and the failure did **not** recur, which means pikopod cannot stand
 behind it as a reproduction. It never fabricates a request to avoid refusing,

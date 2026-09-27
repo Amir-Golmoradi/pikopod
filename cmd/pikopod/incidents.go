@@ -117,7 +117,7 @@ in the window.`,
 			}
 			since, _ := cmd.Flags().GetDuration("since")
 			if len(args) == 0 && since <= 0 {
-				return errfmt.New("nothing to export", "pass a fingerprint or --since <window>", "e.g. pikopod incidents export fp_14835fa32dfb, or --since 24h", "docs/config-reference.md#retention")
+				return errfmt.New("nothing to export", "pass a fingerprint or --since <window>", "e.g. pikopod agent incidents export fp_14835fa32dfb, or --since 24h", "docs/config-reference.md#retention")
 			}
 			host, _ := os.Hostname()
 			now := time.Now()
@@ -184,7 +184,7 @@ func renderIncidents(w io.Writer, evs []alert.DriftEvent, total int, truncated b
 			if until := bridge.ExpiresAt(&ev, retention); until != nil {
 				fmt.Fprintf(w, "  reproducible until %s\n", until.UTC().Format(time.RFC3339))
 			}
-			fmt.Fprintf(w, "  reproduce: pikopod scenario reproduce %s\n  export: pikopod incidents export %s\n", ev.Fingerprint, ev.Fingerprint)
+			fmt.Fprintf(w, "  reproduce: pikopod reproduce %s\n  export: pikopod agent incidents export %s\n", ev.Fingerprint, ev.Fingerprint)
 		}
 	}
 	if truncated {

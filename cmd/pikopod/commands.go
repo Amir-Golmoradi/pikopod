@@ -269,8 +269,9 @@ func contractsForUpstreams(cfg *config.Config) (map[string]*ir.ApiDefinition, er
 }
 
 func newSandboxCmd() *cobra.Command {
-	c := &cobra.Command{Use: "sandbox", Short: "Manage provider sandboxes (add, list, reset, requests)"}
-	c.AddCommand(newSandboxAddCmd(), newSandboxListCmd(), newSandboxResetCmd(), newSandboxRequestsCmd(), newSandboxWebhooksCmd())
+	c := &cobra.Command{Use: "sandbox", Short: "Manage provider sandboxes (add, list, reset, webhooks)"}
+	c.AddCommand(newSandboxAddCmd(), newSandboxListCmd(), newSandboxResetCmd(), newSandboxWebhooksCmd(),
+		oldSpelling(newSandboxRequestsCmd(), "pikopod sandbox requests", "pikopod requests"))
 	return c
 }
 
@@ -307,7 +308,8 @@ func newScenarioCmd() *cobra.Command {
 	create.Flags().Bool("yes", false, "save without the confirmation prompt")
 	create.Flags().String("model", "", "LLM model override (provider default when unset)")
 
-	c.AddCommand(list, run, create, newFromDriftCmd(), newFromRecordingsCmd(), newReproduceCmd())
+	c.AddCommand(list, run, create, newFromDriftCmd(), newFromRecordingsCmd(),
+		oldSpelling(newReproduceCmd(), "pikopod scenario reproduce", "pikopod reproduce"))
 	return c
 }
 
@@ -465,7 +467,7 @@ func newInspectCmd() *cobra.Command {
 			last, _ := cmd.Flags().GetInt("last")
 			format, _ := cmd.Flags().GetString("format")
 			if format != "" && format != "json" && format != "curl" && format != "har" {
-				return errfmt.New("unknown --format "+format, "inspect renders json (default), curl, or har", "e.g. pikopod inspect --format curl", "")
+				return errfmt.New("unknown --format "+format, "inspect renders json (default), curl, or har", "e.g. pikopod agent inspect --format curl", "")
 			}
 			out := cmd.OutOrStdout()
 			shown := 0

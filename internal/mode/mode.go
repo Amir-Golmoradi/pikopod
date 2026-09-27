@@ -137,7 +137,7 @@ func Verify(eng scenario.Target, spec *Spec, seed string) (*scenario.RunResult, 
 		return nil, errfmt.New(
 			spec.Name+" has nothing to verify",
 			"its scenario has no VERIFY_SEQUENCE, VERIFY_REQUESTS, ASSERT_STATE or EXPECT_WEBHOOK step after the armed conditions",
-			"add one to the pack, or read what your client sent with `pikopod sandbox requests <sandbox>`",
+			"add one to the pack, or read what your client sent with `pikopod requests <sandbox>`",
 			"scenarios/README.md")
 	}
 	return scenario.RunWith(readOnly{eng}, spec.Verify, nil, seed, scenario.RunOptions{Subjects: verifySubjects, WallClockGaps: true})

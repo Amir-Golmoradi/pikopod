@@ -35,7 +35,7 @@ func RenderHandoff(raw []byte) (string, string, error) {
 		if err := json.Unmarshal(raw, &h); err != nil {
 			return "", "", err
 		}
-		fmt.Fprintf(&buf, "### pikopod spec-update — %s\n\n", h.Upstream)
+		fmt.Fprintf(&buf, "### pikopod agent spec-update — %s\n\n", h.Upstream)
 		if len(h.Applied) == 0 && len(h.Suggestions) == 0 {
 			buf.WriteString("No traffic-evidenced changes.\n")
 			break
@@ -72,7 +72,7 @@ func RenderHandoff(raw []byte) (string, string, error) {
 		if err := json.Unmarshal(raw, &h); err != nil {
 			return "", "", err
 		}
-		fmt.Fprintf(&buf, "### pikopod conformance — %s\n\n", h.Upstream)
+		fmt.Fprintf(&buf, "### pikopod agent conformance — %s\n\n", h.Upstream)
 		if len(h.Violations) == 0 {
 			fmt.Fprintf(&buf, "%d response(s) checked — the provider obeys its own docs.\n", h.Records)
 			break
@@ -103,7 +103,7 @@ func RenderHandoff(raw []byte) (string, string, error) {
 		if err := json.Unmarshal(raw, &h); err != nil {
 			return "", "", err
 		}
-		buf.WriteString("### pikopod replay --ci\n\n")
+		buf.WriteString("### pikopod agent replay --ci\n\n")
 		if len(h.Findings) == 0 {
 			fmt.Fprintf(&buf, "%d recording(s) gated — clean, no drift against frozen baselines.\n", h.Records)
 			break
