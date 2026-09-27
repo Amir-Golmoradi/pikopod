@@ -58,7 +58,7 @@ after the origin host's retention has aged the incident out.`,
 			}
 			entry, def, err := loadSandboxDef(cfg, sandboxName)
 			if err != nil {
-				fmt.Fprintf(out, "no sandbox to replay against (%v)\nrun it later: pikopod scenario run <sandbox> %s\n", err, name)
+				fmt.Fprintf(out, "no sandbox to replay against (%v)\nrun it later: pikopod scenario check <sandbox> %s\n", err, name)
 				return nil
 			}
 			parsed, _, err := resolveRunnable(cfg, name, def, nil)
@@ -85,7 +85,7 @@ after the origin host's retention has aged the incident out.`,
 				return errfmt.Newf("the reproduction could not run", "fix the pack or the sandbox, then re-run",
 					"scenarios/README.md", "%s", res.Summary)
 			default:
-				fmt.Fprintf(out, "the failure now happens locally — fix it, then re-run: pikopod scenario run %s %s\n", sandboxName, name)
+				fmt.Fprintf(out, "the failure now happens locally — fix it, then re-run: pikopod scenario check %s %s\n", sandboxName, name)
 			}
 			return nil
 		}}

@@ -427,7 +427,7 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			return toolResult{Verdict: VerdictClean, Data: data}, nil
 		}})
 
-	s.Register(mcp.Tool{Name: "scenario_run", Annotations: readOnly(),
+	check := mcp.Tool{Name: "scenario_check", Annotations: readOnly(),
 		Description: "Run archetypes or saved packs against a throwaway copy of a sandbox (the served sandbox is untouched) and return each scenario's verdict with its steps and failed assertions. CLEAN when all pass, FINDINGS when any fails, ERROR when a step could not execute. This drives pikopod's own requests, not the caller's application; use set_mode to put the running sandbox into a state the caller's own tests then meet.",
 		InputSchema: schema([]string{"sandbox", "names"}, map[string]any{"sandbox": prop("string", "sandbox name"), "names": map[string]any{"type": "array", "items": prop("string", ""), "description": "archetype ids or pack names"}, "bind": map[string]any{"type": "object", "additionalProperties": prop("string", ""), "description": "role → operationId overrides"}}),
 		Handler: func(_ context.Context, raw json.RawMessage) (any, error) {
@@ -481,12 +481,17 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			data := map[string]any{"runs": runs}
 			switch {
 			case errored > 0:
-				return toolResult{Verdict: VerdictError, Data: data, Error: &toolError{What: "scenario run errored", Why: "a step could not execute", Fix: "fix the scenario or sandbox and retry", Docs: "docs/exit-codes.md"}}, nil
+				return toolResult{Verdict: VerdictError, Data: data, Error: &toolError{What: "scenario check errored", Why: "a step could not execute", Fix: "fix the scenario or sandbox and retry", Docs: "docs/exit-codes.md"}}, nil
 			case failed > 0:
 				return toolResult{Verdict: VerdictFindings, Data: data}, nil
 			}
 			return toolResult{Verdict: VerdictClean, Data: data}, nil
-		}})
+		}}
+	s.Register(check)
+	alias := check
+	alias.Name = "scenario_run"
+	alias.Hidden = true
+	s.Register(alias)
 
 	s.Register(mcp.Tool{Name: "set_mode", Annotations: controlsFake(),
 		Description: "Put the RUNNING sandbox (pikopod up) into a scenario's failure state so the caller's own tests, application or plain HTTP requests meet it: for example declines, rate limiting, duplicate webhook deliveries. The mode stands until clear_mode. Controls a local fake, never a provider. Needs pikopod up; scenarios that have no standing state (their first step is a request) are refused with the reason.",

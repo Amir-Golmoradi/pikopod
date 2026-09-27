@@ -73,7 +73,7 @@ func listTools(t *testing.T, cfg *config.Config) []string {
 
 func TestMCPToolListIsReadersAndFakeControlsOnly(t *testing.T) {
 	names := listTools(t, testConfig(t, "https://example.invalid"))
-	want := []string{"arm_fault", "clear_faults", "clear_mode", "conformance", "drift_events", "emit_webhook", "get_requests", "mode_verify", "replay_ci", "reproduce", "scenario_list", "scenario_run", "set_mode", "spec_diff"}
+	want := []string{"arm_fault", "clear_faults", "clear_mode", "conformance", "drift_events", "emit_webhook", "get_requests", "mode_verify", "replay_ci", "reproduce", "scenario_check", "scenario_list", "set_mode", "spec_diff"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools:\n got %v\nwant %v", names, want)
 	}
@@ -192,11 +192,15 @@ func TestScenarioListAndRunOverMCP(t *testing.T) {
 	if !sawReason {
 		t.Fatal("a non-binding archetype must carry its reason")
 	}
-	res, _ = callTool(t, cfg, "scenario_run", map[string]any{"sandbox": "widgets", "names": []string{"declines"}})
+	res, _ = callTool(t, cfg, "scenario_check", map[string]any{"sandbox": "widgets", "names": []string{"declines"}})
 	if res["verdict"] != VerdictClean {
 		t.Fatalf("declines passes on widgets: %v", res)
 	}
-	res, _ = callTool(t, cfg, "scenario_run", map[string]any{"sandbox": "widgets", "names": []string{"not_a_thing"}})
+	alias, _ := callTool(t, cfg, "scenario_run", map[string]any{"sandbox": "widgets", "names": []string{"declines"}})
+	if alias["verdict"] != VerdictClean {
+		t.Fatalf("scenario_run must still answer as an alias of scenario_check: %v", alias)
+	}
+	res, _ = callTool(t, cfg, "scenario_check", map[string]any{"sandbox": "widgets", "names": []string{"not_a_thing"}})
 	if res["verdict"] != VerdictError {
 		t.Fatalf("an unknown scenario is ERROR: %v", res)
 	}

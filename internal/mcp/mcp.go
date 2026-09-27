@@ -17,6 +17,7 @@ type Tool struct {
 	Description string
 	InputSchema map[string]any
 	Annotations map[string]any
+	Hidden      bool
 	Handler     func(ctx context.Context, args json.RawMessage) (any, error)
 }
 
@@ -118,6 +119,9 @@ func (s *Server) handle(ctx context.Context, req *request) response {
 		list := make([]map[string]any, 0, len(s.tools))
 		for _, name := range s.ToolNames() {
 			t := s.tools[name]
+			if t.Hidden {
+				continue
+			}
 			entry := map[string]any{"name": t.Name, "description": t.Description, "inputSchema": t.InputSchema}
 			if t.Annotations != nil {
 				entry["annotations"] = t.Annotations

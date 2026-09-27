@@ -48,7 +48,7 @@ func TestScenarioListOffersTheBindLineOnADraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := out.String()
-	for _, want := range []string{"extracted facts", "assert it: pikopod scenario run pay declines --bind op=createIntent"} {
+	for _, want := range []string{"extracted facts", "assert it: pikopod scenario check pay declines --bind op=createIntent"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("list must show %q:\n%s", want, got)
 		}

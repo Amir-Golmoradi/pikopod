@@ -47,7 +47,7 @@ func newFromDriftCmd() *cobra.Command {
 			}
 			entry, def, err := loadSandboxDef(cfg, sandboxName)
 			if err != nil {
-				fmt.Fprintf(out, "no sandbox to replay against (%v)\nrun it later: pikopod scenario run <sandbox> %s\n", err, name)
+				fmt.Fprintf(out, "no sandbox to replay against (%v)\nrun it later: pikopod scenario check <sandbox> %s\n", err, name)
 				return nil
 			}
 			parsed, _, err := resolveRunnable(cfg, name, def, nil)
@@ -71,7 +71,7 @@ func newFromDriftCmd() *cobra.Command {
 			case scenario.RunErrored:
 				return fmt.Errorf("replay errored: %s", res.Summary)
 			default:
-				fmt.Fprintf(out, "baseline pinned and green — a future re-import that adopts this change will fail `pikopod scenario run %s %s`\n", sandboxName, name)
+				fmt.Fprintf(out, "baseline pinned and green — a future re-import that adopts this change will fail `pikopod scenario check %s %s`\n", sandboxName, name)
 			}
 			return nil
 		}}

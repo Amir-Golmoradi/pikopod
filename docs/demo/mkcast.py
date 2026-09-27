@@ -54,7 +54,7 @@ emit_file("out_list.txt")
 pause(2.4)
 
 prompt()
-typed("pikopod scenario run examplepay declines retry_storm")
+typed("pikopod scenario check examplepay declines retry_storm")
 emit_file("out_run.txt", 0.05)
 pause(2.6)
 

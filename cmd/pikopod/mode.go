@@ -87,7 +87,7 @@ func newModeCmd() *cobra.Command {
 	c := &cobra.Command{Use: "mode", Short: "Put a RUNNING sandbox into a scenario's failure state, and run your own tests against it",
 		Long: `Put a RUNNING sandbox into a scenario's failure state.
 
-` + "`pikopod scenario run`" + ` drives its own requests against a throwaway engine, so
+` + "`pikopod scenario check`" + ` drives its own requests against a throwaway engine, so
 your application is never in the loop. A mode is the other half: it arms the
 scenario's standing conditions on the sandbox ` + "`pikopod up`" + ` is serving, and then
 your own tests, your own app, or plain curl meet the failure.

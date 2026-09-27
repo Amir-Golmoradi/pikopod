@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/pikopod/pikopod/main/schema/scenario-pack.schema.json",
   "title": "ScenarioPack",
-  "description": "A pikopod scenario pack: a named, shareable failure scenario run against a sandbox. YAML on disk; this schema describes the JSON-shaped document. The definition block mirrors the scenario definition language (internal/scenario/definition.go): limits are 200 steps, 50 assertions/step, 1000 assertions total, 90 virtual days per wait.",
+  "description": "A pikopod scenario pack: a named, shareable failure scenario check against a sandbox. YAML on disk; this schema describes the JSON-shaped document. The definition block mirrors the scenario definition language (internal/scenario/definition.go): limits are 200 steps, 50 assertions/step, 1000 assertions total, 90 virtual days per wait.",
   "type": "object",
   "required": ["name", "provider", "definition"],
   "properties": {
     "name": { "type": "string", "minLength": 1, "description": "Pack slug, unique within a packs directory." },
-    "provider": { "type": "string", "minLength": 1, "description": "The sandbox/provider this pack was authored against. Metadata: `pikopod scenario run` targets whatever sandbox you name." },
+    "provider": { "type": "string", "minLength": 1, "description": "The sandbox/provider this pack was authored against. Metadata: `pikopod scenario check` targets whatever sandbox you name." },
     "description": { "type": "string" },
     "contractVersion": { "type": "integer", "minimum": 1, "description": "from-drift pins: the effective-contract version at pin time — the pack runs against ResolveAt(contractVersion) forever, so later refinement can never move a pin." },
     "definition": {

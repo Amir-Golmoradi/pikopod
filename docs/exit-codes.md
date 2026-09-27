@@ -5,7 +5,7 @@ Exit codes are API. Script against them.
 | Code | Meaning | Who scripts against it |
 |------|---------|------------------------|
 | `0` | Clean — no drift found | CI passes |
-| `1` | The check ran and failed: drift found, assertions failed, or the provider violated its own spec (`pikopod replay --ci`, `pikopod spec-diff`, `pikopod scenario run`, `pikopod scenario from-drift`, and `pikopod conformance` **with `--strict`**) | CI fails the build on provider drift |
+| `1` | The check ran and failed: drift found, assertions failed, or the provider violated its own spec (`pikopod replay --ci`, `pikopod spec-diff`, `pikopod scenario check`, `pikopod scenario from-drift`, and `pikopod conformance` **with `--strict`**) | CI fails the build on provider drift |
 | `2` | pikopod or configuration error (bad YAML, refused bind, missing config, a result pikopod cannot verify) | Distinguishes "provider changed" from "tool misconfigured" — never conflate these in CI |
 
 The separation between `1` and `2` is the point. A build that fails because
