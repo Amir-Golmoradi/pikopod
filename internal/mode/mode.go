@@ -71,7 +71,7 @@ func Compile(name, source string, def *scenario.ScenarioDefinition) (*Spec, erro
 		return nil, errfmt.New(
 			name+" has no standing state to enter",
 			"its first step is "+first+", so it asserts behaviour rather than arming a condition",
-			"run it instead: `pikopod scenario run <sandbox> "+name+"`",
+			"run it instead: `pikopod scenario check <sandbox> "+name+"`",
 			"scenarios/README.md")
 	}
 	var verify []scenario.Step

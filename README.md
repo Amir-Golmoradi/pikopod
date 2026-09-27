@@ -131,7 +131,7 @@ Ten stories bound to four endpoints with nothing authored. The one that did
 not says which fact the spec is missing.
 
 ```bash
-pikopod scenario run examplepay declines retry_storm
+pikopod scenario check examplepay declines retry_storm
 ```
 
 ```
@@ -140,11 +140,12 @@ pikopod scenario run examplepay declines retry_storm
     PASSED         declined         POST /charges → 400
     NOT_EVALUATED  clear            cleared matching faults
     PASSED         recovered        POST /charges → 201
-✓ retry_storm — PASSED (4 assertion(s) passed; 0 not evaluated)
+✓ retry_storm — PASSED (7 assertion(s) passed; 0 not evaluated)
     NOT_EVALUATED  arm              armed error on POST /charges
     PASSED         attempt1         POST /charges → 503
     PASSED         attempt2         POST /charges → 503
     PASSED         attempt3         POST /charges → 201
+    PASSED         storm-shape      3 matcher(s) matched in order
 ```
 
 That proves the sandbox fails the way the story says. To prove your own code
@@ -182,7 +183,7 @@ pikopod scenario reproduce fp_14835fa32dfb
 ```
 reproduced fp_14835fa32dfb (examplepay answered 503 on POST /charges) as pikopod-data/scenarios/incident-14835fa32dfb.yaml
 PASSED — 1 assertion(s) passed; 0 not evaluated
-the failure now happens locally — fix it, then re-run: pikopod scenario run examplepay incident-14835fa32dfb
+the failure now happens locally — fix it, then re-run: pikopod scenario check examplepay incident-14835fa32dfb
 ```
 
 The generated pack is an ordinary scenario: commit it and it guards that path

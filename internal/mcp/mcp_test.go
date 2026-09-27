@@ -64,6 +64,28 @@ func TestInitializeListAndCall(t *testing.T) {
 	}
 }
 
+func TestHiddenToolIsCallableButNotListed(t *testing.T) {
+	s := testServer()
+	s.Register(Tool{Name: "echo_old", Description: "old name", Hidden: true, Handler: s.tools["echo"].Handler})
+	res := drive(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo_old","arguments":{"x":2}}}`,
+	)
+	tools := res[0]["result"].(map[string]any)["tools"].([]any)
+	for _, tl := range tools {
+		if tl.(map[string]any)["name"] == "echo_old" {
+			t.Fatalf("hidden tool must not be listed: %v", tools)
+		}
+	}
+	if len(tools) != 2 {
+		t.Fatalf("listing must still carry the visible tools: %v", tools)
+	}
+	call := res[1]["result"].(map[string]any)
+	if call["isError"] != false || call["structuredContent"].(map[string]any)["got"].(map[string]any)["x"] != 2.0 {
+		t.Fatalf("hidden tool must still answer: %v", call)
+	}
+}
+
 func TestErrorsAreResultsNotProtocolFailures(t *testing.T) {
 	s := testServer()
 	s.OnError = func(err error) any { return map[string]any{"verdict": "ERROR", "why": err.Error()} }

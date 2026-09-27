@@ -460,7 +460,7 @@ a guess.
 
 ```bash
 pikopod scenario list examplepay
-pikopod scenario run examplepay declines timeouts
+pikopod scenario check examplepay declines timeouts
 pikopod scenario create examplepay "timeout after the charge succeeds"   # needs llm
 pikopod scenario from-drift fp_6d540d187d44
 ```
@@ -539,7 +539,7 @@ The readers are the checks an agent cannot make by reading files:
 | `replay_ci` | The CI gate: recordings against frozen baselines. |
 | `conformance` | Whether the provider's recorded responses obey its own spec; redacted evidence counts as unverifiable, never as a pass. |
 | `reproduce` | A recorded incident turned into a pack and run locally (writes one pack file under `data_dir/scenarios`). |
-| `scenario_list`, `scenario_run` | Which archetypes bind to a sandbox, with the reason when one does not, and the verdict of running them against a throwaway copy. |
+| `scenario_list`, `scenario_check` | Which archetypes bind to a sandbox, with the reason when one does not, and the verdict of running them against a throwaway copy. |
 | `get_requests` | What the caller's own code actually sent to the running sandbox. |
 
 The controls put a **running** sandbox (`pikopod up`) into a state the

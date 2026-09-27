@@ -1,4 +1,4 @@
-sandbox examplepay registered (sbx_427a29f9786844e8, 4 endpoints)
+sandbox examplepay registered (sbx_554e2099fad65ee7, 4 endpoints)
 serve it with `pikopod up` → http://127.0.0.1:4600/examplepay/...
 test credential (send it the way the spec's auth scheme expects, e.g. the Authorization header):
-  pikopod_sbx_test_fd50d404a3613982ef8e6ee407492fe839676c5c3982fa42
+  pikopod_sbx_test_325b7008ce274f86fa0d80e784c343299ff10474e7a98158

@@ -45,7 +45,7 @@ func newFromRecordingsCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(out, "generated %s from %d recording(s): %s\n", name, len(records), path)
-			fmt.Fprintf(out, "run it: pikopod scenario run %s %s\n", upstream, name)
+			fmt.Fprintf(out, "run it: pikopod scenario check %s %s\n", upstream, name)
 			fmt.Fprintln(out, "chains are conservative (identifier-shaped, produced-before-consumed only) — review the pack before trusting it in CI")
 			return nil
 		}}

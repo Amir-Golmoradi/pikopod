@@ -275,7 +275,7 @@ func newSandboxCmd() *cobra.Command {
 }
 
 func newScenarioCmd() *cobra.Command {
-	c := &cobra.Command{Use: "scenario", Short: "List, create (archetypes or plain English via BYOK), run, and derive scenarios from drift or recorded traffic"}
+	c := &cobra.Command{Use: "scenario", Short: "List, create (archetypes or plain English via BYOK), check, and derive scenarios from drift or recorded traffic"}
 
 	list := &cobra.Command{Use: "list <sandbox>", Short: "Show which archetypes bind to this sandbox's API, plus saved packs", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -288,7 +288,12 @@ func newScenarioCmd() *cobra.Command {
 		}}
 	list.Flags().BoolP("verbose", "v", false, "show which operations each archetype bound to")
 
-	run := &cobra.Command{Use: "run <sandbox> <scenarios...>", Short: "Bind, expand, and run scenarios (exit 0 pass / 1 fail / 2 error)", Args: cobra.MinimumNArgs(2),
+	run := &cobra.Command{Use: "check <sandbox> <scenarios...>", Aliases: []string{"run"}, Short: "Bind, expand, and run scenarios (exit 0 pass / 1 fail / 2 error)", Args: cobra.MinimumNArgs(2),
+		PreRun: func(cmd *cobra.Command, _ []string) {
+			if cmd.CalledAs() == "run" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "`pikopod scenario run` is now `pikopod scenario check`; `run` still works this release")
+			}
+		},
 		RunE: scenarioRun}
 	run.Flags().Bool("persist", false, "run against the sandbox's real store: SEEDED STATE stands for the served sandbox; armed faults do NOT outlive the run (arm the daemon with `pikopod chaos` instead)")
 	run.Flags().String("seed", "", "run seed (default: the sandbox's seed)")

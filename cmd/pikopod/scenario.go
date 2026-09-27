@@ -101,7 +101,7 @@ func scenarioList(cfg *config.Config, sandboxName string, verbose bool, out io.W
 		} else {
 			fmt.Fprintf(out, "  ✗ %-26s %s\n      %s\n", b.ID, b.Title, b.Reason)
 			if len(b.Inferred) > 0 {
-				fmt.Fprintf(out, "      assert it: pikopod scenario run %s %s%s\n", sandboxName, b.ID, bindFlags(b.Inferred[0]))
+				fmt.Fprintf(out, "      assert it: pikopod scenario check %s %s%s\n", sandboxName, b.ID, bindFlags(b.Inferred[0]))
 			}
 		}
 	}
@@ -115,7 +115,7 @@ func scenarioList(cfg *config.Config, sandboxName string, verbose bool, out io.W
 	for path, ferr := range fails {
 		fmt.Fprintf(out, "  ! %s does not load: %v\n", path, ferr)
 	}
-	fmt.Fprintf(out, "\nrun one: pikopod scenario run %s <name> [<name>...]\n", sandboxName)
+	fmt.Fprintf(out, "\nrun one: pikopod scenario check %s <name> [<name>...]\n", sandboxName)
 	return nil
 }
 
@@ -275,7 +275,7 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if errored > 0 {
-		return errfmt.New("scenario run errored", "a step could not execute (see the ! run above)", "fix the scenario or sandbox and retry", "docs/exit-codes.md")
+		return errfmt.New("scenario check errored", "a step could not execute (see the ! run above)", "fix the scenario or sandbox and retry", "docs/exit-codes.md")
 	}
 	if failed > 0 {
 		fmt.Fprintf(out, "\n%d scenario(s) failed — exit 1\n", failed)
@@ -385,7 +385,7 @@ func scenarioCreate(cmd *cobra.Command, args []string) error {
 	if err := os.WriteFile(path, rendered, 0o600); err != nil {
 		return errfmt.Newf("cannot save the pack", "check permissions on "+path, "", "%v", err)
 	}
-	fmt.Fprintf(out, "saved %s — run it: pikopod scenario run %s %s\n", path, sandboxName, pack["name"])
+	fmt.Fprintf(out, "saved %s — run it: pikopod scenario check %s %s\n", path, sandboxName, pack["name"])
 	return nil
 }
 

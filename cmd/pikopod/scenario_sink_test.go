@@ -39,7 +39,7 @@ func TestScenarioRunDrainsTheSinkBeforeReturning(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if got.Load() != 1 {
-		t.Fatalf("the sink must have received the delivery before scenario run returned (got %d)\n%s", got.Load(), out)
+		t.Fatalf("the sink must have received the delivery before scenario check returned (got %d)\n%s", got.Load(), out)
 	}
 	if !strings.Contains(out, "sink: 1 delivered, 0 failed to "+sink.URL) {
 		t.Fatalf("the summary must report the sink outcome:\n%s", out)

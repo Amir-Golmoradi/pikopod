@@ -1,7 +1,7 @@
 # Scenario packs
 
 This directory holds scenario packs you keep in version control. `pikopod
-scenario run` looks for packs in **`./scenarios`** (relative to where you run
+scenario check` looks for packs in **`./scenarios`** (relative to where you run
 it) and in **`<data_dir>/scenarios`**. Generated packs are written to
 `<data_dir>/scenarios` — copy one here to check it in.
 
@@ -13,13 +13,13 @@ integration survives.
 
 ```bash
 pikopod scenario list <sandbox>                    # which archetypes bind to YOUR api
-pikopod scenario run <sandbox> declines timeouts   # run them
+pikopod scenario check <sandbox> declines timeouts   # run them
 pikopod scenario create <sandbox> "timeout after the charge succeeds"
 pikopod scenario from-drift fp_385153d1776c        # a real drift becomes a test
 pikopod scenario from-recordings <upstream>        # recorded traffic becomes a pack
 ```
 
-`scenario run` takes flags: `--persist` (run against the sandbox's real store
+`scenario check` takes flags: `--persist` (run against the sandbox's real store
 instead of an ephemeral copy), `--seed`, `--input name=value`, `--bind
 role=operationId`, and `--target` / `--target-header` for a real endpoint.
 `scenario create` takes `--yes` and `--model`; `from-drift` takes `--sandbox`;
@@ -59,7 +59,7 @@ When you disagree, you have two options:
 
 ```bash
 pikopod scenario list examplepay                  # see what bound, and why the rest did not
-pikopod scenario run examplepay declines --bind op=createCharge
+pikopod scenario check examplepay declines --bind op=createCharge
 ```
 
 `--bind role=operationId` overrides one role. The role names are the ones the
@@ -77,7 +77,7 @@ role, and the run says so:
 ```
   ✗ declines                   Declines
       every candidate rests on extracted facts only; assert a role with --bind
-      assert it: pikopod scenario run examplepay declines --bind op=createIntent
+      assert it: pikopod scenario check examplepay declines --bind op=createIntent
 ```
 
 An asserted operation must still have the role's shape (a `CREATE` role needs
@@ -154,7 +154,7 @@ definition:
           expected: true
 ```
 
-Top level: `name` (required), `provider` (required — metadata; `scenario run`
+Top level: `name` (required), `provider` (required — metadata; `scenario check`
 targets whatever sandbox you name on the command line), `description`,
 `contractVersion` (set by `from-drift`), `definition` (required).
 
@@ -396,7 +396,7 @@ archetype ID nor a pack in either scenarios directory. Packs resolve by their
 
 ## Running against a real endpoint
 
-`pikopod scenario run <sandbox> <pack> --target https://api.example.com` drives
+`pikopod scenario check <sandbox> <pack> --target https://api.example.com` drives
 the pack at a real base URL instead of the sandbox. Only `REQUEST`, `NOTE`, and
 `SNAPSHOT` steps are allowed there: a real endpoint has no fault arming, seeded
 state, virtual clock, webhook outbox, or request journal to consult, so any
