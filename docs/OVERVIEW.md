@@ -164,7 +164,7 @@ leave you with an alert pointing at something you cannot run.
 
 ### Reproduction
 
-`pikopod scenario reproduce <fingerprint>` turns an incident into a runnable
+`pikopod reproduce <fingerprint>` turns an incident into a runnable
 scenario: it arms the same failure in your sandbox and replays the recorded
 request at it. The break happens on your laptop instead of in production, and
 the generated pack is an ordinary scenario you can commit.
@@ -208,7 +208,7 @@ still sending it 120 requests a day."*
 
 Recorded traffic becomes fixtures, matched hierarchically — exact, then shape,
 then sequence — with every served response naming the tier it came from.
-`pikopod replay --ci` gates builds offline.
+`pikopod agent replay --ci` gates builds offline.
 
 ### Fix
 
@@ -273,9 +273,9 @@ baselines, the event log and the recordings behind every open incident.
 **An incident reaches a developer in one of four ways**, in rough order of how
 often they apply:
 
-1. **Export a bundle.** `pikopod incidents export <fp>` on the agent host writes
+1. **Export a bundle.** `pikopod agent incidents export <fp>` on the agent host writes
    one JSON file with the event, the already-redacted recording and the contract
-   version. `pikopod scenario reproduce ./incident.json` and `pikopod fix
+   version. `pikopod reproduce ./incident.json` and `pikopod fix
    ./incident.json` on a laptop read nothing from that laptop's `data_dir`, and
    the file keeps working after the origin's retention has aged the incident
    out. The alert names the deadline as `reproducible until`.
@@ -284,7 +284,7 @@ often they apply:
    recording at all.
 3. **Share `data_dir`** read-only (a mounted volume, an rsync) for a team that
    wants every incident, not one at a time.
-4. **Automate the export**: `pikopod incidents export --since 24h` in a cron job,
+4. **Automate the export**: `pikopod agent incidents export --since 24h` in a cron job,
    attached to an issue or a pull request, so nobody has to remember step 1.
 
 ## Where the data lives
@@ -293,5 +293,5 @@ Everything is under `data_dir`: recordings, baselines, alert state, imported
 contracts, scenario packs, the event log. Nothing is uploaded. There is no
 account and no telemetry.
 
-Recordings are redacted before they are written, and `pikopod inspect` shows you
+Recordings are redacted before they are written, and `pikopod agent inspect` shows you
 exactly what was kept. See [security notes](security.md).

@@ -8,6 +8,14 @@ import (
 )
 
 func main() {
+	if err := newRootCmd().Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(2)
+	}
+}
+
+func newRootCmd() *cobra.Command {
+	cobra.EnableCommandSorting = false
 	root := &cobra.Command{
 		Use:           "pikopod",
 		Short:         "Sandbox, scenario-test, and drift-watch your third-party API integrations — locally",
@@ -18,38 +26,32 @@ func main() {
 
 	root.PersistentFlags().String("config", "", "path to pikopod.yaml (default: ./pikopod.yaml)")
 
+	for _, g := range commandGroups {
+		root.AddGroup(&cobra.Group{ID: g.id, Title: g.title})
+	}
+
 	root.AddCommand(
-		newDemoCmd(),
-		newInitCmd(),
-		newImportCmd(),
-		newUpCmd(),
-		newSandboxCmd(),
-		newScenarioCmd(),
-		newContractCmd(),
-		newWhyCmd(),
-		newConformanceCmd(),
-		newSpecDiffCmd(),
-		newSpecUpdateCmd(),
-		newPRCmd(),
-		newFixCmd(),
-		newVolatileCmd(),
-		newReplayCmd(),
-		newChaosCmd(),
-		newModeCmd(),
-		newWebhookCmd(),
-		newMCPCmd(),
-		newBaselineCmd(),
-		newAckCmd(),
-		newAcceptCmd(),
-		newReportCmd(),
-		newIncidentsCmd(),
-		newDoctorCmd(),
-		newInspectCmd(),
-		newStatusCmd(),
+		inGroup("sandbox", newImportCmd()),
+		inGroup("sandbox", newUpCmd()),
+		inGroup("sandbox", newModeCmd()),
+		inGroup("sandbox", newChaosCmd()),
+		inGroup("sandbox", newWebhookCmd()),
+		inGroup("sandbox", newRequestsCmd()),
+		inGroup("sandbox", newReproduceCmd()),
+		inGroup("scenarios", newScenarioCmd()),
+		inGroup("ci", newSpecDiffCmd()),
+		inGroup("observe", newAgentCmd()),
+		inGroup("setup", newInitCmd()),
+		inGroup("setup", newDoctorCmd()),
+		inGroup("setup", newDemoCmd()),
+		inGroup("setup", newMCPCmd()),
+		inGroup("more", newFixCmd()),
+		inGroup("more", newPRCmd()),
+		inGroup("more", newSandboxCmd()),
 	)
 
-	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(2)
+	for _, old := range oldTopLevelSpellings() {
+		root.AddCommand(old)
 	}
+	return root
 }

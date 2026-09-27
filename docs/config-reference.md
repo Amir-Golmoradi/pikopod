@@ -68,7 +68,7 @@ upstreams:
 | `spec_source` | Arms the declared-drift watcher. See [spec_watch](#spec_watch). |
 | `incidents` | Tunes failed-exchange capture. See [incidents](#incidents). |
 
-Use `pikopod volatile suggest <upstream>` to find noisy fields rather than
+Use `pikopod agent volatile suggest <upstream>` to find noisy fields rather than
 guessing. It also reports configured entries that are **dead** (match nothing
 learned), **stable** (the field never changed value, so nothing is silenced) or
 **over-broad** (a bare name also covers a field that never churned); `pikopod
@@ -128,8 +128,8 @@ is the normal answer would page you all day. Below **20 requests** to an endpoin
 family no rate is claimed at all, because the first 4xx is a rate of 1.0 and
 means nothing.
 
-Every incident is reproducible: see `pikopod incidents` and
-`pikopod scenario reproduce <fingerprint>`.
+Every incident is reproducible: see `pikopod agent incidents` and
+`pikopod reproduce <fingerprint>`.
 
 ## listen
 
@@ -213,7 +213,7 @@ older than the retention window can no longer be pinned. Saved packs are
 unaffected.
 
 Every incident row and alert therefore carries `reproducible until <time>` and
-an `export:` hint. `pikopod incidents export <fp>` writes a self-contained
+an `export:` hint. `pikopod agent incidents export <fp>` writes a self-contained
 bundle (event, redacted recording, contract version; never the salt, the token
 or any configuration) that `scenario reproduce` and `fix` accept in place of a
 fingerprint, on any machine, and that keeps working after this host's window
@@ -250,7 +250,7 @@ slack:
 | `digest_hours` | Periodic digest of new findings by severity. `0` disables it. |
 
 `min_level` floors **the channel, not the record**. Muted alerts still appear
-in the local event log, in `pikopod status`, and in the digest.
+in the local event log, in `pikopod agent status`, and in the digest.
 
 ## alerts
 
@@ -269,8 +269,8 @@ here because error messages point at it.
 - **Latency is never alerted.** pikopod only reports changes it can prove from
   the bytes. See [OVERVIEW](OVERVIEW.md#what-pikopod-refuses-to-do).
 
-Acknowledge with `pikopod ack <fingerprint>`; accept a change as the new normal
-with `pikopod accept`.
+Acknowledge with `pikopod agent ack <fingerprint>`; accept a change as the new normal
+with `pikopod agent accept`.
 
 ## baselines
 
@@ -289,7 +289,7 @@ Both are overridable for evaluation. Lowering them shortens the blind window
 and raises false positives — a baseline built from 5 samples has not seen your
 optional fields yet. `min_hours: 0` is explicitly distinguishable from unset.
 
-Inspect progress with `pikopod status` and `pikopod report`.
+Inspect progress with `pikopod agent status` and `pikopod agent report`.
 
 ## spec_watch
 
@@ -326,7 +326,7 @@ the spec-derived contract, and matured observations join the effective
 contract. `prefer_spec` flips type-conflict precedence back to spec-wins; the
 default is traffic-wins once the sustain gates clear.
 
-Inspect the result with `pikopod contract <sandbox>`.
+Inspect the result with `pikopod agent contract <sandbox>`.
 
 ## behaviour
 
@@ -342,7 +342,7 @@ field whose value changed between two recordings records an edge, `pending →
 succeeded`, with a count. Nothing in a specification can say this; only
 traffic can.
 
-`pikopod contract <sandbox>` renders the graph (and `--format json` emits it):
+`pikopod agent contract <sandbox>` renders the graph (and `--format json` emits it):
 
 ```
 observed state machine — examplepay

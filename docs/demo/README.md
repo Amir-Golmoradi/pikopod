@@ -40,8 +40,8 @@ pikopod import examplepay --spec ./examplepay.spec.json > out_import.txt
 pikopod scenario list examplepay             > out_list.txt
 pikopod scenario check examplepay declines retry_storm > out_run.txt
 python3 seed_incident.py
-pikopod incidents                            > out_incidents.txt
-pikopod scenario reproduce fp_14835fa32dfb   > out_reproduce.txt
+pikopod agent incidents                            > out_incidents.txt
+pikopod reproduce fp_14835fa32dfb   > out_reproduce.txt
 
 python3 mkcast.py
 agg --theme asciinema --font-size 15 --fps-cap 8 demo.cast demo.gif

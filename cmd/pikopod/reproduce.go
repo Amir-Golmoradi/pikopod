@@ -22,7 +22,7 @@ func newReproduceCmd() *cobra.Command {
 		Long: `Reproduce a recorded production failure as a scenario against the sandbox.
 
 The argument is a fingerprint from the local event log, or the path of a bundle
-written by pikopod incidents export on the host that recorded the incident. A
+written by pikopod agent incidents export on the host that recorded the incident. A
 bundle carries the event, the already-redacted recording and the contract
 version, so nothing is read from this data_dir; once exported it keeps working
 after the origin host's retention has aged the incident out.`,

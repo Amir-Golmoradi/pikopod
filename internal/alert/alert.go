@@ -301,7 +301,7 @@ func (a *Alerter) emit(ev *DriftEvent, now time.Time) {
 	if deliverable {
 		a.deliver(RenderWithRetention(ev, a.opts.Retention), true)
 	} else if suppressedNote {
-		a.deliver("pikopod: alert delivery ceiling reached ("+strconv.Itoa(maxDeliveriesPerHour)+"/h) — further alerts this hour are in the local event log (`pikopod status`)", false)
+		a.deliver("pikopod: alert delivery ceiling reached ("+strconv.Itoa(maxDeliveriesPerHour)+"/h) — further alerts this hour are in the local event log (`pikopod agent status`)", false)
 	}
 }
 
@@ -347,7 +347,7 @@ func renderDigest(counts map[string]int, floored int) string {
 	if floored > 0 {
 		msg += fmt.Sprintf(" · %d alert(s) below slack.min_level (event log has them)", floored)
 	}
-	return msg + "\ndetails: `pikopod status`"
+	return msg + "\ndetails: `pikopod agent status`"
 }
 
 func (a *Alerter) SweepLog() { a.log.Sweep() }
@@ -516,11 +516,11 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 	case drift.ErrorShapeChanged:
 		detail = fmt.Sprintf("error body restructured: [%s] → [%s] — error-handling paths parse the old shape", ev.Before, ev.After)
 	case drift.UpstreamError:
-		detail = fmt.Sprintf("upstream answered %s — reproduce it locally: `pikopod scenario reproduce %s`", ev.After, ev.Fingerprint)
+		detail = fmt.Sprintf("upstream answered %s — reproduce it locally: `pikopod reproduce %s`", ev.After, ev.Fingerprint)
 	case drift.UpstreamUnreachable:
 		detail = fmt.Sprintf("pikopod could not reach the upstream (answered %s itself) — no retry was attempted", ev.After)
 	case drift.RateLimited:
-		detail = fmt.Sprintf("upstream answered %s — reproduce the backoff path: `pikopod scenario reproduce %s`", ev.After, ev.Fingerprint)
+		detail = fmt.Sprintf("upstream answered %s — reproduce the backoff path: `pikopod reproduce %s`", ev.After, ev.Fingerprint)
 	case drift.ClientError:
 		detail = fmt.Sprintf("upstream rejected our requests with %s above the configured rate — usually our own payload", ev.After)
 	}
@@ -539,7 +539,7 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		if retention > 0 {
 			portable = " · reproducible until " + ev.LastSeen.Add(retention).UTC().Format(time.RFC3339)
 		}
-		portable += "\nexport: `pikopod incidents export " + ev.Fingerprint + "`"
+		portable += "\nexport: `pikopod agent incidents export " + ev.Fingerprint + "`"
 	}
 	return fmt.Sprintf(
 		"%s *pikopod %s — %s* on `%s %s` (%s)\n%s%s\nfingerprint `%s` · first seen %s · %d occurrence(s)%s\nreplay it: `pikopod scenario %s %s`",

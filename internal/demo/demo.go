@@ -98,7 +98,7 @@ func Run(out io.Writer) error {
 	say("")
 	say("Then, when you are ready to watch real traffic:")
 	say("  pikopod up                          # staging first, then production")
-	say("  pikopod incidents                   # what failed; reproduce any of it")
+	say("  pikopod agent incidents                   # what failed; reproduce any of it")
 	return nil
 }
 

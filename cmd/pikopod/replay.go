@@ -19,7 +19,7 @@ func runReplay(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 
 	if !ci {
-		return errfmt.New("replay needs --ci", "--ci is the only mode: it diffs recordings offline against frozen baselines", "run `pikopod replay --ci [upstreams...]`", "docs/exit-codes.md")
+		return errfmt.New("replay needs --ci", "--ci is the only mode: it diffs recordings offline against frozen baselines", "run `pikopod agent replay --ci [upstreams...]`", "docs/exit-codes.md")
 	}
 
 	upstreams := args

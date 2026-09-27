@@ -26,7 +26,7 @@ func newContractCmd() *cobra.Command {
 				return contractJSON(cfg, args[0], cmd.OutOrStdout())
 			}
 			if format != "" && format != "text" {
-				return errfmt.New("unknown --format "+format, "contract renders text (default) or json", "e.g. pikopod contract examplepay --format json", "")
+				return errfmt.New("unknown --format "+format, "contract renders text (default) or json", "e.g. pikopod agent contract examplepay --format json", "")
 			}
 			return contractReport(cfg, args[0], cmd.OutOrStdout())
 		}}
@@ -152,7 +152,7 @@ func contractReport(cfg *config.Config, sandboxName string, out io.Writer) error
 			fmt.Fprintf(out, "  %-30s pinned at v%d — %s\n", pk.Name, pk.ContractVersion, state)
 		}
 	}
-	fmt.Fprintln(out, "\nadmissions happen automatically on agent persist ticks; accepted drift re-freezes via `pikopod accept <fingerprint>`")
+	fmt.Fprintln(out, "\nadmissions happen automatically on agent persist ticks; accepted drift re-freezes via `pikopod agent accept <fingerprint>`")
 	writeBehaviour(out, beh)
 	return nil
 }

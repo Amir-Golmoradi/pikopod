@@ -83,12 +83,12 @@ func (a *applier) apply(c Change) (Patch, bool) {
 			return Patch{}, false
 		}
 		val := mapping(
-			"description", str("Observed in traffic; added by pikopod spec-update."),
+			"description", str("Observed in traffic; added by pikopod agent spec-update."),
 			"x-pikopod-observed", evidenceNode(c.Evidence),
 		)
 		mapSet(responses, code, val)
 		return Patch{Change: c, Ops: []Op{{Op: "add", Path: opPath + "/responses/" + code,
-			Value: map[string]any{"description": "Observed in traffic; added by pikopod spec-update.",
+			Value: map[string]any{"description": "Observed in traffic; added by pikopod agent spec-update.",
 				"x-pikopod-observed": evidenceValue(c.Evidence)}}}}, true
 	}
 

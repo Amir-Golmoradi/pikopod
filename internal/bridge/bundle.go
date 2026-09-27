@@ -95,7 +95,7 @@ func DecodeBundle(raw []byte) (*Bundle, error) {
 		SchemaVersion int `json:"schema_version"`
 	}
 	if err := json.Unmarshal(raw, &probe); err != nil {
-		return nil, errfmt.Newf("incident bundle is not valid JSON", "export it again with `pikopod incidents export <fp>`", bundleDocs, "%v", err)
+		return nil, errfmt.Newf("incident bundle is not valid JSON", "export it again with `pikopod agent incidents export <fp>`", bundleDocs, "%v", err)
 	}
 	if probe.SchemaVersion != BundleSchemaVersion {
 		return nil, errfmt.Newf("unsupported incident bundle", "export it again with this version of pikopod", bundleDocs, "schema_version %d, this pikopod reads %d", probe.SchemaVersion, BundleSchemaVersion)
@@ -107,7 +107,7 @@ func DecodeBundle(raw []byte) (*Bundle, error) {
 		return nil, errfmt.Newf("incident bundle has fields this pikopod does not know", "export it again with this version of pikopod, or remove the extra fields", bundleDocs, "%v", err)
 	}
 	if b.Event.Fingerprint == "" || b.Recording.Method == "" {
-		return nil, errfmt.New("incident bundle is incomplete", "it carries no event or no recording", "export it again with `pikopod incidents export <fp>`", bundleDocs)
+		return nil, errfmt.New("incident bundle is incomplete", "it carries no event or no recording", "export it again with `pikopod agent incidents export <fp>`", bundleDocs)
 	}
 	return &b, nil
 }

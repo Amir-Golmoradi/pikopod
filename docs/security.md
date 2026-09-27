@@ -41,7 +41,7 @@ pikopod does not recognise is written verbatim.
 This is a deliberate trade, not an oversight — dropping every unrecognised
 number would discard most of what makes a baseline useful — and it is the one
 place redaction is not fail-closed. If that matters for a field, check it with
-`pikopod inspect` before you trust the recording; `volatile_fields` does not
+`pikopod agent inspect` before you trust the recording; `volatile_fields` does not
 keep a field out of learning, it only stops its values from being tracked.
 
 Detection is generic — key names, value shape, entropy — never a list of
@@ -62,10 +62,10 @@ as before. `pikopod up` prints how many fields this applies to.
 Verify it yourself rather than trusting this page:
 
 ```bash
-pikopod inspect
+pikopod agent inspect
 ```
 
-`inspect` prints stored records with tokenized fields visible, so you can
+`agent inspect` prints stored records with tokenized fields visible, so you can
 confirm for yourself what was kept before you trust it.
 
 
