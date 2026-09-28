@@ -1,0 +1,172 @@
+{
+  "meta": {
+    "specFile": "sandbox/widgets.spec.json",
+    "sandboxSeed": "parity-rules-1",
+    "virtualClockMs": 1735689600000,
+    "credential": "pikopod_sbx_test_e5ca75c06a2eef43cf8793558e5d9e3c2bcd77b201309fb9",
+    "rulesFile": "sandbox/widgets.rules.json",
+    "normalizedPaths": [
+      "generated from code by the rules transcript generator; regenerate, never hand-edit"
+    ]
+  },
+  "steps": [
+    {
+      "name": "create-gear",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "gear",
+        "size": 3
+      },
+      "status": 201,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\""
+      },
+      "respBody": {
+        "name": "gear",
+        "size": 3,
+        "id": "widgets_1"
+      }
+    },
+    {
+      "name": "create-gear-again-refused-by-rule",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "gear",
+        "size": 4
+      },
+      "status": 422,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": {
+        "error": "name already taken"
+      }
+    },
+    {
+      "name": "create-cog",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "cog",
+        "size": 1
+      },
+      "status": 201,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\""
+      },
+      "respBody": {
+        "name": "cog",
+        "size": 1,
+        "id": "widgets_2"
+      }
+    },
+    {
+      "name": "read-gear",
+      "method": "GET",
+      "path": "/widgets/widgets_1",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\""
+      },
+      "respBody": {
+        "name": "gear",
+        "size": 3,
+        "id": "widgets_1"
+      }
+    },
+    {
+      "name": "freeze-gear-by-rule",
+      "method": "PATCH",
+      "path": "/widgets/widgets_1",
+      "reqHeaders": {},
+      "reqBody": {
+        "size": 0
+      },
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": {
+        "frozen": true
+      }
+    },
+    {
+      "name": "read-frozen-gear-refused-by-rule",
+      "method": "GET",
+      "path": "/widgets/widgets_1",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 423,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": {
+        "error": "widget is frozen"
+      }
+    },
+    {
+      "name": "read-cog-still-fine",
+      "method": "GET",
+      "path": "/widgets/widgets_2",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\""
+      },
+      "respBody": {
+        "name": "cog",
+        "size": 1,
+        "id": "widgets_2"
+      }
+    },
+    {
+      "name": "first-put-conflicts-by-rule",
+      "method": "PUT",
+      "path": "/widgets/widgets_2",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "cog",
+        "size": 9
+      },
+      "status": 409,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": {
+        "error": "try again"
+      }
+    },
+    {
+      "name": "second-put-passes-through",
+      "method": "PUT",
+      "path": "/widgets/widgets_2",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "cog",
+        "size": 9
+      },
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"1\""
+      },
+      "respBody": {
+        "name": "cog",
+        "size": 9,
+        "id": "widgets_2"
+      }
+    }
+  ]
+}

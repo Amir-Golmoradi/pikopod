@@ -34,6 +34,7 @@ type Config struct {
 	WallclockFaults   bool
 	Effective         *contract.Effective
 	Recordings        *replay.Set
+	Rules             *RuleSet
 }
 
 type Engine struct {
@@ -57,6 +58,8 @@ type Engine struct {
 
 	faultMu         sync.Mutex
 	faults          []FaultRule
+	rulesMu         sync.Mutex
+	rules           []compiledRule
 	wallclockFaults bool
 	effective       *contract.Effective
 	journal         journal
@@ -151,6 +154,11 @@ func NewEngine(def *ir.ApiDefinition, cfg Config, store *Store) (*Engine, error)
 		}
 		e.envelope = &envelopeRenderer{spec: env, key: cfg.WebhookSigningKey, seed: cfg.Seed}
 	}
+	rules, err := compileRules(def, cfg.Rules)
+	if err != nil {
+		return nil, err
+	}
+	e.rules = rules
 	e.journalTok = sanitize.NewTokenizer(cfg.Seed, "sandbox-journal", 1)
 	if cfg.WebhookURL != "" {
 		e.webhookURL = cfg.WebhookURL
@@ -445,6 +453,10 @@ func (e *Engine) serve(req *ingressRequest, innerPath string) (*RawResponse, err
 	if forced := e.forcedResponse(result.endpoint, req); forced != nil {
 		e.tracef("forced", "%s forced status %d (peek: no state touch, no webhook)", ForcedStatusHeader, forced.Status)
 		return forced, nil
+	}
+
+	if ruled := e.applyRules(result, req, innerPath); ruled != nil {
+		return ruled, nil
 	}
 
 	op := deriveOperation(result.endpoint, result.pathParams)

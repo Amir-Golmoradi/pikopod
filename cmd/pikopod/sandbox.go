@@ -456,6 +456,10 @@ func effectiveFor(cfg *config.Config, entry *sandboxEntry, version int) *contrac
 	return contract.ResolveAt(ov, at)
 }
 
+func rulesFor(cfg *config.Config, entry *sandboxEntry) (*sandbox.RuleSet, error) {
+	return sandbox.LoadRuleSet(sandbox.RulesPath(cfg.DataDir, entry.Name))
+}
+
 func recordingsFor(cfg *config.Config, entry *sandboxEntry) *replay.Set {
 	if !entry.RecordingsFallback {
 		return nil
@@ -553,6 +557,10 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	rules, err := rulesFor(s.cfg, &entry)
+	if err != nil {
+		return nil, err
+	}
 	engine, err := sandbox.NewEngine(&def, sandbox.Config{
 		ID:                entry.ID,
 		Seed:              entry.Seed,
@@ -561,6 +569,7 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 		WallclockFaults:   s.wallclockFaults,
 		Effective:         effectiveFor(s.cfg, &entry, 0),
 		Recordings:        recordingsFor(s.cfg, &entry),
+		Rules:             rules,
 		WebhookURL:        entry.WebhookURL,
 		WebhookSigningKey: signingKey,
 	}, s.store)

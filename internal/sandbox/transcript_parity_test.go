@@ -28,6 +28,7 @@ type transcriptMeta struct {
 	SandboxSeed     string   `json:"sandboxSeed"`
 	VirtualClockMs  int64    `json:"virtualClockMs"`
 	Credential      string   `json:"credential"`
+	RulesFile       string   `json:"rulesFile,omitempty"`
 	NormalizedPaths []string `json:"normalizedPaths"`
 }
 
@@ -77,6 +78,13 @@ func replayTranscript(t *testing.T, file string) {
 	}
 	defer store.Close()
 
+	var rules *RuleSet
+	if tr.Meta.RulesFile != "" {
+		rules, err = LoadRuleSet(filepath.Join("../../testdata/parity", tr.Meta.RulesFile))
+		if err != nil {
+			t.Fatalf("load rules %s: %v", tr.Meta.RulesFile, err)
+		}
+	}
 	engine, err := NewEngine(def, Config{
 		ID:             "sbx_parity",
 		Seed:           tr.Meta.SandboxSeed,
@@ -84,6 +92,7 @@ func replayTranscript(t *testing.T, file string) {
 		VirtualClockMs: tr.Meta.VirtualClockMs,
 
 		Credential: tr.Meta.Credential,
+		Rules:      rules,
 	}, store)
 	if err != nil {
 		t.Fatalf("build engine: %v", err)
