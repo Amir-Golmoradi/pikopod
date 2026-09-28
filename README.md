@@ -25,12 +25,9 @@
   <a href="https://pikopod.com">pikopod.com</a>
 </p>
 
-**Their sandbox only knows how to succeed.** It has never declined a charge in
-a way you didn't ask for, never timed out halfway through, never delivered the
-same webhook twice. So the first time your retry path runs for real, it runs
-against real money. pikopod builds a sandbox from your provider's own spec,
-makes it fail on purpose, and when production fails anyway, replays that exact
-failure back into it so you fix it on a laptop and keep the fix as a test.
+**Their sandbox only knows how to succeed.** ISo the first time your retry path runs for real, it runs against real money.
+
+pikopod builds a sandbox from your provider's spec, makes it fail on purpose, and replays the exact failure production hit, on your laptop, as a test you keep.
 
 One Go binary. Runs locally. No accounts, no telemetry, no cloud.
 

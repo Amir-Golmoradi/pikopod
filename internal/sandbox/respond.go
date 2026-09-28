@@ -134,7 +134,7 @@ func (e *Engine) buildSuccessResponse(endpoint *ir.Endpoint) *RawResponse {
 		}
 	}
 	schema := successSchema(endpoint, status)
-	ctx := e.synthCtx("passthrough", endpoint.ID, strconv.Itoa(status))
+	ctx := e.synthCtx("passthrough", endpoint.ID, strconv.Itoa(status)).forResponse(endpoint, status)
 	if resolved := derefSchema(schema, ctx, 0); resolved != nil && (resolved.Type.Value == "object" || resolved.Type.Value == "array") {
 		e.tracef("response", "synthesized from the %d response schema", status)
 		return jsonResponse(status, synthesize(schema, ctx, 0, ""), nil)

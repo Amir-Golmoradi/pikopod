@@ -15,10 +15,26 @@ type synthContext struct {
 	prng           *Prng
 	virtualClockMs int64
 	namedSchemas   map[string]*ir.IrSchemaNode
+	status         int
+	description    string
+	sandbox        string
+	trace          func(field, source string)
+}
+
+func (ctx *synthContext) forResponse(endpoint *ir.Endpoint, status int) *synthContext {
+	ctx.status = status
+	ctx.description = ""
+	if endpoint == nil {
+		return ctx
+	}
+	if def := errorResponseDef(endpoint, status); def != nil && def.Description != nil {
+		ctx.description = strings.TrimSpace(def.Description.Value)
+	}
+	return ctx
 }
 
 func makeContext(seed string, virtualClockMs int64, namedSchemas map[string]*ir.IrSchemaNode) *synthContext {
-	return &synthContext{prng: NewPrng(seed), virtualClockMs: virtualClockMs, namedSchemas: namedSchemas}
+	return &synthContext{prng: NewPrng(seed), virtualClockMs: virtualClockMs, namedSchemas: namedSchemas, sandbox: "sandbox"}
 }
 
 const (
@@ -61,11 +77,7 @@ func pickAny(p *Prng, items []any) any {
 	return items[p.Int(0, len(items)-1)]
 }
 
-var (
-	lnameEmail   = regexp.MustCompile(`email`)
-	lnameURL     = regexp.MustCompile(`(^|_)(url|uri|link)$`)
-	lnameTimeish = regexp.MustCompile(`(_at|date|time)$`)
-)
+var lnameEmail = regexp.MustCompile(`email`)
 
 func synthString(schema *ir.IrSchemaNode, ctx *synthContext, fieldName string) string {
 	format := ""
@@ -73,6 +85,9 @@ func synthString(schema *ir.IrSchemaNode, ctx *synthContext, fieldName string) s
 		format = schema.Format.Value
 	}
 	p := ctx.prng
+	if format != "" {
+		ctx.note(fieldName, "format "+format)
+	}
 	switch format {
 	case "uuid":
 		return p.Hex(8) + "-" + p.Hex(4) + "-4" + p.Hex(3) + "-" + p.Pick([]string{"8", "9", "a", "b"}) + p.Hex(3) + "-" + p.Hex(12)
@@ -83,7 +98,7 @@ func synthString(schema *ir.IrSchemaNode, ctx *synthContext, fieldName string) s
 	case "date":
 		return isoFrom(ctx.virtualClockMs, true)
 	case "uri", "url":
-		return "https://" + p.Word() + "." + p.Pick([]string{"com", "io", "test"}) + "/" + p.Word()
+		return "https://" + ctx.sandbox + ".test/" + p.Word()
 	case "hostname":
 		return p.Word() + "." + p.Pick([]string{"com", "io", "test"})
 	case "ipv4":
@@ -92,14 +107,14 @@ func synthString(schema *ir.IrSchemaNode, ctx *synthContext, fieldName string) s
 
 	lname := strings.ToLower(fieldName)
 	if lnameEmail.MatchString(lname) {
+		ctx.note(fieldName, "convention email")
 		return p.Word() + "@" + p.Word() + ".test"
 	}
-	if lnameURL.MatchString(lname) {
-		return "https://" + p.Word() + ".test/" + p.Word()
+	if value, source, ok := conventionString(ctx, fieldName); ok {
+		ctx.note(fieldName, source)
+		return value
 	}
-	if lnameTimeish.MatchString(lname) {
-		return isoFrom(ctx.virtualClockMs, false)
-	}
+	ctx.note(fieldName, "fallback")
 
 	min := numericConstraint(schema, "minLength")
 	max := numericConstraint(schema, "maxLength")
@@ -114,9 +129,19 @@ func synthString(schema *ir.IrSchemaNode, ctx *synthContext, fieldName string) s
 	return s
 }
 
-func synthNumber(schema *ir.IrSchemaNode, ctx *synthContext, integer bool) any {
+func synthNumber(schema *ir.IrSchemaNode, ctx *synthContext, integer bool, fieldName string) any {
 	min := numericConstraint(schema, "minimum")
 	max := numericConstraint(schema, "maximum")
+	if min == nil && max == nil {
+		if value, source, ok := conventionNumber(ctx, fieldName, integer); ok {
+			ctx.note(fieldName, source)
+			return value
+		}
+	}
+	return synthNumberRange(min, max, ctx, integer)
+}
+
+func synthNumberRange(min, max *float64, ctx *synthContext, integer bool) any {
 	lo := 0.0
 	if min != nil {
 		lo = *min
@@ -146,9 +171,14 @@ func synthesize(schema *ir.IrSchemaNode, ctx *synthContext, depth int, fieldName
 		return nil
 	}
 	if schema.Composition != nil && len(schema.Composition.Members) > 0 {
-		return synthesize(&schema.Composition.Members[0], ctx, depth+1, fieldName)
+		return synthesize(flattenComposition(schema, ctx, depth), ctx, depth+1, fieldName)
+	}
+	if value, source, ok := declaredValue(schema); ok {
+		ctx.note(fieldName, source)
+		return value
 	}
 	if schema.EnumValues != nil && len(schema.EnumValues.Value) > 0 {
+		ctx.note(fieldName, "enum")
 		return pickAny(ctx.prng, schema.EnumValues.Value)
 	}
 
@@ -187,10 +217,14 @@ func synthesize(schema *ir.IrSchemaNode, ctx *synthContext, depth int, fieldName
 	case "string":
 		return synthString(schema, ctx, fieldName)
 	case "integer":
-		return synthNumber(schema, ctx, true)
+		return synthNumber(schema, ctx, true, fieldName)
 	case "number":
-		return synthNumber(schema, ctx, false)
+		return synthNumber(schema, ctx, false, fieldName)
 	case "boolean":
+		if value, ok := conventionBool(ctx, fieldName); ok {
+			ctx.note(fieldName, "convention "+strconv.FormatBool(value)+" on "+strconv.Itoa(ctx.status))
+			return value
+		}
 		return ctx.prng.Bool()
 	case "null":
 		return nil
@@ -207,7 +241,40 @@ func derefSchema(schema *ir.IrSchemaNode, ctx *synthContext, depth int) *ir.IrSc
 	if schema.Ref != nil {
 		return derefSchema(ctx.namedSchemas[*schema.Ref], ctx, depth+1)
 	}
+	if schema.Composition != nil && len(schema.Composition.Members) > 0 {
+		return derefSchema(flattenComposition(schema, ctx, depth), ctx, depth+1)
+	}
 	return schema
+}
+
+func flattenComposition(schema *ir.IrSchemaNode, ctx *synthContext, depth int) *ir.IrSchemaNode {
+	members := schema.Composition.Members
+	if schema.Composition.Kind != "allOf" || depth > 10 {
+		return &members[0]
+	}
+	merged := &ir.IrSchemaNode{ID: schema.ID, Type: ir.Prov[ir.ScalarType]{Value: "object"}, SourcePointer: schema.SourcePointer}
+	seen := map[string]bool{}
+	objects := 0
+	for i := range members {
+		m := derefSchema(&members[i], ctx, depth+1)
+		if m == nil || m.Type.Value != "object" {
+			continue
+		}
+		objects++
+		merged.Nullable = m.Nullable
+		for _, p := range m.Properties {
+			if seen[p.Name] {
+				continue
+			}
+			seen[p.Name] = true
+			merged.Properties = append(merged.Properties, p)
+		}
+		merged.Constraints = append(merged.Constraints, m.Constraints...)
+	}
+	if objects == 0 {
+		return &members[0]
+	}
+	return merged
 }
 
 func completeResource(responseSchema *ir.IrSchemaNode, provided *JSONObject, ctx *synthContext, declaredOnly bool) *JSONObject {

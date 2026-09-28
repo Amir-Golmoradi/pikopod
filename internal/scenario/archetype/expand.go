@@ -141,8 +141,154 @@ func Expand(a *Archetype, bindings map[string]string, apiDef *ir.ApiDefinition) 
 		}
 		steps[i] = sub
 	}
+	if !a.RawBodies {
+		fillRequiredBodies(steps, apiDef)
+	}
 	return &Expanded{
 		Definition:       map[string]any{"steps": steps, "requiresFidelity": a.RequiresFidelity},
 		RequiresFidelity: a.RequiresFidelity,
 	}, nil
+}
+
+func fillRequiredBodies(steps []any, apiDef *ir.ApiDefinition) {
+	named := map[string]*ir.IrSchemaNode{}
+	for i := range apiDef.Schemas {
+		named[apiDef.Schemas[i].ID] = &apiDef.Schemas[i].Schema
+	}
+	for _, raw := range steps {
+		step, ok := raw.(map[string]any)
+		if !ok || step["type"] != "REQUEST" {
+			continue
+		}
+		cfg, ok := step["config"].(map[string]any)
+		if !ok {
+			continue
+		}
+		method, _ := cfg["method"].(string)
+		path, _ := cfg["path"].(string)
+		endpoint := endpointForStep(apiDef, method, path)
+		if endpoint == nil || endpoint.RequestBody == nil {
+			continue
+		}
+		body, isObject := cfg["body"].(map[string]any)
+		if !isObject {
+			continue
+		}
+		var schema *ir.IrSchemaNode
+		for i := range endpoint.RequestBody.Content {
+			if strings.Contains(strings.ToLower(endpoint.RequestBody.Content[i].MediaType), "json") {
+				schema = &endpoint.RequestBody.Content[i].Schema
+				break
+			}
+		}
+		if schema == nil {
+			continue
+		}
+		for k, v := range minimalRequired(schema, named, 0) {
+			if _, has := body[k]; !has {
+				body[k] = v
+			}
+		}
+		cfg["body"] = body
+	}
+}
+
+func endpointForStep(apiDef *ir.ApiDefinition, method, path string) *ir.Endpoint {
+	want := strings.Split(strings.Trim(path, "/"), "/")
+	var fallback *ir.Endpoint
+	for i := range apiDef.Endpoints {
+		ep := &apiDef.Endpoints[i]
+		if !strings.EqualFold(ep.Method.Value, method) {
+			continue
+		}
+		if ep.PathTemplate.Value == path {
+			return ep
+		}
+		have := strings.Split(strings.Trim(ep.PathTemplate.Value, "/"), "/")
+		if len(have) != len(want) {
+			continue
+		}
+		match := true
+		for j := range have {
+			param := strings.HasPrefix(have[j], "{") || strings.HasPrefix(want[j], "{{")
+			if !param && have[j] != want[j] {
+				match = false
+				break
+			}
+		}
+		if match && fallback == nil {
+			fallback = ep
+		}
+	}
+	return fallback
+}
+
+func minimalRequired(schema *ir.IrSchemaNode, named map[string]*ir.IrSchemaNode, depth int) map[string]any {
+	out := map[string]any{}
+	if schema == nil || depth > 6 {
+		return out
+	}
+	for hops := 0; schema.Ref != nil && hops < 10; hops++ {
+		target, ok := named[*schema.Ref]
+		if !ok {
+			return out
+		}
+		schema = target
+	}
+	if schema.Composition != nil && len(schema.Composition.Members) > 0 {
+		return minimalRequired(&schema.Composition.Members[0], named, depth+1)
+	}
+	for i := range schema.Properties {
+		p := &schema.Properties[i]
+		if !p.Required.Value {
+			continue
+		}
+		out[p.Name] = minimalValue(&p.Schema, p.Name, named, depth+1)
+	}
+	return out
+}
+
+func minimalValue(schema *ir.IrSchemaNode, name string, named map[string]*ir.IrSchemaNode, depth int) any {
+	for hops := 0; schema != nil && schema.Ref != nil && hops < 10; hops++ {
+		target, ok := named[*schema.Ref]
+		if !ok {
+			return name
+		}
+		schema = target
+	}
+	if schema == nil || depth > 6 {
+		return name
+	}
+	if schema.EnumValues != nil && len(schema.EnumValues.Value) > 0 {
+		return schema.EnumValues.Value[0]
+	}
+	format := ""
+	if schema.Format != nil {
+		format = schema.Format.Value
+	}
+	switch schema.Type.Value {
+	case "object":
+		return minimalRequired(schema, named, depth)
+	case "array":
+		return []any{}
+	case "integer", "number":
+		return 1
+	case "boolean":
+		return true
+	case "string":
+		switch format {
+		case "email":
+			return "user@example.test"
+		case "date-time":
+			return "2025-01-01T00:00:00.000Z"
+		case "date":
+			return "2025-01-01"
+		case "uri", "url":
+			return "https://example.test/"
+		case "uuid":
+			return "00000000-0000-4000-8000-000000000000"
+		}
+		return name
+	}
+	return name
 }

@@ -189,10 +189,9 @@ func TestDeterminismAcrossEngines(t *testing.T) {
 	}
 
 	e3 := newEngine(t, def, Config{ID: "sbx_det", Seed: "seed-beta", VirtualClockMs: SandboxBaseEpochMs})
-	r3 := do(t, e3, "GET", "/roles/missing_9", "", map[string]string{"Authorization": e3.Credential()})
-	r1 := do(t, e1, "GET", "/roles/missing_9", "", auth)
-	if r3.body == r1.body {
-		t.Fatalf("different seeds produced identical synthesized error bodies: %s", r1.body)
+	r3 := do(t, e3, "POST", "/roles", `{"name":"QA"}`, map[string]string{"Authorization": e3.Credential()})
+	if r3.body == createBody {
+		t.Fatalf("different seeds produced identical synthesized bodies: %s", createBody)
 	}
 }
 

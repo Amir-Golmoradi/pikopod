@@ -79,9 +79,16 @@ func jsStrictEqual(enumValue, value any) bool {
 	}
 }
 
-func validateNode(schema *ir.IrSchemaNode, value any, path string, depth int, errors *[]string) {
+func validateNode(schema *ir.IrSchemaNode, value any, path string, depth int, errors *[]string, named map[string]*ir.IrSchemaNode) {
 	if depth > validateMaxDepth {
 		return
+	}
+	for hops := 0; schema.Ref != nil && hops < 10; hops++ {
+		target, ok := named[*schema.Ref]
+		if !ok {
+			return
+		}
+		schema = target
 	}
 	label := path
 	if label == "" {
@@ -121,6 +128,9 @@ func validateNode(schema *ir.IrSchemaNode, value any, path string, depth int, er
 			if path != "" {
 				childPath = path + "." + prop.Name
 			}
+			if serverAssigned(prop, depth) {
+				continue
+			}
 			v, present := obj.Get(prop.Name)
 			if !present {
 				if prop.Required.Value {
@@ -128,23 +138,36 @@ func validateNode(schema *ir.IrSchemaNode, value any, path string, depth int, er
 				}
 				continue
 			}
-			validateNode(&prop.Schema, v, childPath, depth+1, errors)
+			validateNode(&prop.Schema, v, childPath, depth+1, errors, named)
 		}
 	case "array":
 		if schema.Items != nil {
 			arr := value.([]any)
 			for i := 0; i < len(arr) && i < 1000; i++ {
-				validateNode(schema.Items, arr[i], path+"["+strconv.Itoa(i)+"]", depth+1, errors)
+				validateNode(schema.Items, arr[i], path+"["+strconv.Itoa(i)+"]", depth+1, errors, named)
 			}
 		}
 	}
 }
 
+func serverAssigned(prop *ir.PropertySchema, depth int) bool {
+	if v, ok := constraintValue(&prop.Schema, "readOnly"); ok {
+		if b, isBool := v.(bool); isBool && b {
+			return true
+		}
+	}
+	return depth == 0 && prop.Name == "id"
+}
+
 func validateBody(schema *ir.IrSchemaNode, value any) []string {
+	return validateBodyWith(schema, value, nil)
+}
+
+func validateBodyWith(schema *ir.IrSchemaNode, value any, named map[string]*ir.IrSchemaNode) []string {
 	if !isEnforceableSchema(schema) {
 		return nil
 	}
 	var errors []string
-	validateNode(schema, value, "", 0, &errors)
+	validateNode(schema, value, "", 0, &errors, named)
 	return errors
 }

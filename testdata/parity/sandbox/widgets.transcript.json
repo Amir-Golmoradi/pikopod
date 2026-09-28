@@ -5,7 +5,7 @@
     "virtualClockMs": 1735689600000,
     "credential": "pikopod_sbx_test_e5c3fd0316418e1bc3ec8809f31fffc1eb4332a655a99378",
     "normalizedPaths": [
-      "steps[*].reqHeaders.* == meta.credential -> \"$CREDENTIAL\" (TS mints issued tokens via randomBytes; the replayer substitutes the engine credential)"
+      "steps[*].reqHeaders.* == meta.credential -\u003e \"$CREDENTIAL\" (TS mints issued tokens via randomBytes; the replayer substitutes the engine credential)"
     ]
   },
   "steps": [
@@ -24,9 +24,9 @@
         "etag": "\"0\""
       },
       "respBody": {
-        "id": "widgets_1",
         "name": "gear",
-        "size": 3
+        "size": 3,
+        "id": "widgets_1"
       }
     },
     {
@@ -41,9 +41,9 @@
         "etag": "\"0\""
       },
       "respBody": {
-        "id": "widgets_1",
         "name": "gear",
-        "size": 3
+        "size": 3,
+        "id": "widgets_1"
       }
     },
     {
@@ -58,9 +58,9 @@
       },
       "respBody": [
         {
-          "id": "widgets_1",
           "name": "gear",
-          "size": 3
+          "size": 3,
+          "id": "widgets_1"
         }
       ]
     },
@@ -80,8 +80,8 @@
         "etag": "\"1\""
       },
       "respBody": {
-        "id": "widgets_1",
-        "name": "cog"
+        "name": "cog",
+        "id": "widgets_1"
       }
     },
     {
@@ -98,8 +98,8 @@
         "etag": "\"2\""
       },
       "respBody": {
-        "id": "widgets_1",
         "name": "cog",
+        "id": "widgets_1",
         "size": 9
       }
     },

@@ -5,10 +5,10 @@
     "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
     "schemas": {"Charge": {"type": "object", "required": ["id","amount","status"],
       "properties": {
-        "id": {"type": "string"},
+        "id": {"type": "string", "readOnly": true},
         "amount": {"type": "integer"},
         "currency": {"type": "string"},
-        "status": {"type": "string", "enum": ["success","pending","failed"]}
+        "status": {"type": "string", "enum": ["success","pending","failed"], "readOnly": true}
       }}}
   },
   "security": [{"bearer": []}],

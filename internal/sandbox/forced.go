@@ -32,7 +32,7 @@ func (e *Engine) forcedResponse(endpoint *ir.Endpoint, req *ingressRequest) *Raw
 	}
 	var resp *RawResponse
 	if schema != nil {
-		synth := e.synthCtx("forced", strconv.Itoa(status))
+		synth := e.synthCtx("forced", strconv.Itoa(status)).forResponse(endpoint, status)
 		if body := synthesize(schema, synth, 0, ""); body != nil {
 			resp = jsonResponse(status, body, nil)
 		}

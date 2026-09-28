@@ -7,6 +7,8 @@ type RoleMatch struct {
 	RequiresAuth          bool   `json:"requiresAuth,omitempty"`
 	HasEnumField          bool   `json:"hasEnumField,omitempty"`
 
+	HasRequiredRequestField bool `json:"hasRequiredRequestField,omitempty"`
+
 	SameResourceAs string `json:"sameResourceAs,omitempty"`
 }
 
@@ -25,4 +27,5 @@ type Archetype struct {
 	Requires         []RoleRequirement `json:"requires"`
 	RequiresFidelity string            `json:"requiresFidelity"`
 	Expands          []map[string]any  `json:"expands"`
+	RawBodies        bool              `json:"rawBodies,omitempty"`
 }

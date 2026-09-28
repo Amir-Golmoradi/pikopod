@@ -282,6 +282,7 @@ func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer
 		return err
 	}
 	fmt.Fprintf(out, "sandbox %s registered (%s, %d endpoints)\n", name, entry.ID, len(def.Endpoints))
+	fmt.Fprintf(out, "responses: %s\n", sandbox.RealismLine(def))
 	if len(def.Webhooks) > 0 {
 		if webhookURL != "" {
 			fmt.Fprintf(out, "webhooks: %d declared event(s); deliveries POST to %s (signed; secret below)\n  webhook secret: %s\n", len(def.Webhooks), webhookURL, sandbox.IssuedWebhookSecret(entry.Seed))
@@ -386,6 +387,9 @@ func sandboxList(cfg *config.Config, out io.Writer) error {
 			marking = "  origin=" + e.Origin
 		}
 		fmt.Fprintf(out, "%-20s %s  mode=%s seed=%s  route=/%s/  ir=%s%s\n  credential: %s\n", e.Name, e.ID, e.Mode, e.Seed, e.Name, e.IRFile, marking, sandbox.IssuedCredential(e.Seed))
+		if defErr == nil {
+			fmt.Fprintf(out, "  responses: %s\n", sandbox.RealismLine(def))
+		}
 		if defErr == nil && len(def.Webhooks) > 0 {
 			declared, triggered, emitOnly, untriggered := webhookCounts(def)
 			line := fmt.Sprintf("  webhooks: %d declared, %d triggered, %d emit-only", declared, triggered, emitOnly)

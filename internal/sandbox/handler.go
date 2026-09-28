@@ -89,12 +89,19 @@ func (e *Engine) synthCtx(parts ...string) *synthContext {
 		rand.Read(nonce)
 		base = base + ":" + hex.EncodeToString(nonce)
 	}
-	return makeContext(base, e.virtualClockMs, e.namedSchemas)
+	ctx := makeContext(base, e.virtualClockMs, e.namedSchemas)
+	if name := strings.TrimPrefix(e.mountPrefix, "/"); name != "" {
+		ctx.sandbox = name
+	}
+	if e.trace != nil {
+		ctx.trace = func(field, source string) { e.tracef("synth", "%s ← %s", field, source) }
+	}
+	return ctx
 }
 
 func (e *Engine) endpointError(ctx *storeCtx, status int, message string) *RawResponse {
 	if schema := errorSchema(ctx.endpoint, status); schema != nil {
-		synth := e.synthCtx("error", strconv.Itoa(status))
+		synth := e.synthCtx("error", strconv.Itoa(status)).forResponse(ctx.endpoint, status)
 		if body := synthesize(schema, synth, 0, ""); body != nil {
 			return jsonResponse(status, body, nil)
 		}
@@ -146,7 +153,7 @@ func (e *Engine) doList(ctx *storeCtx) (*RawResponse, error) {
 	if cursorKey != nil {
 		cursorSeed = *cursorKey
 	}
-	synth := e.synthCtx("list", ctx.op.typ, cursorSeed)
+	synth := e.synthCtx("list", ctx.op.typ, cursorSeed).forResponse(ctx.endpoint, 200)
 	items := make([]any, len(page.Items))
 	for i, r := range page.Items {
 		items[i] = json.RawMessage(r.Attributes)
@@ -167,7 +174,7 @@ func (e *Engine) doCreate(ctx *storeCtx) (*RawResponse, error) {
 		return errResp, nil
 	}
 
-	if invalid := validateBody(requestSchema(ctx.endpoint), attrs); len(invalid) > 0 {
+	if invalid := validateBodyWith(requestSchema(ctx.endpoint), attrs, e.namedSchemas); len(invalid) > 0 {
 		return e.validationErrorResponse(ctx, invalid), nil
 	}
 
@@ -189,14 +196,16 @@ func (e *Engine) doCreate(ctx *storeCtx) (*RawResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	resourceKey := typeSlug(ctx.op.typ) + "_" + strconv.FormatInt(seq, 10)
 	status := pickSuccessStatus(ctx.endpoint, 201)
+	probe := e.synthCtx("create-shape", ctx.op.typ)
+	shape := shapeFor(successSchema(ctx.endpoint, status), resourceKeys(attrs, requestSchema(ctx.endpoint), probe), probe)
+	resourceKey, idValue, idDeclared := e.resourceIdentity(shape.inner, probe, ctx.op.typ, seq)
 
-	synth := e.synthCtx("create", resourceKey)
-	shape := shapeFor(successSchema(ctx.endpoint, status), resourceKeys(attrs, requestSchema(ctx.endpoint), synth), synth)
+	synth := e.synthCtx("create", resourceKey).forResponse(ctx.endpoint, status)
 	stored := completeResource(shape.inner, attrs, synth, !ctx.isResource)
-	if ctx.isResource {
-		stored.Set("id", resourceKey)
+	if ctx.isResource || idDeclared {
+		stored.Set("id", idValue)
+		e.tracef("synth", "id ← store key %v", idValue)
 	}
 
 	marshaled, err := marshalJSValue(stored)
@@ -231,7 +240,7 @@ func (e *Engine) doModify(ctx *storeCtx) (*RawResponse, error) {
 		return errResp, nil
 	}
 
-	if invalid := validateBody(requestSchema(ctx.endpoint), attrs); len(invalid) > 0 {
+	if invalid := validateBodyWith(requestSchema(ctx.endpoint), attrs, e.namedSchemas); len(invalid) > 0 {
 		return e.validationErrorResponse(ctx, invalid), nil
 	}
 
@@ -268,11 +277,13 @@ func (e *Engine) doModify(ctx *storeCtx) (*RawResponse, error) {
 			attrs = merged
 		} else {
 
-			synth := e.synthCtx("replace", *ctx.op.key, strconv.FormatInt(current.Version+1, 10))
-			attrs = completeResource(successSchema(ctx.endpoint, 200), reqAttrs, synth, false)
+			synth := e.synthCtx("replace", *ctx.op.key, strconv.FormatInt(current.Version+1, 10)).forResponse(ctx.endpoint, 200)
+			shape := shapeFor(successSchema(ctx.endpoint, 200), resourceKeys(reqAttrs, requestSchema(ctx.endpoint), synth), synth)
+			attrs = completeResource(shape.inner, reqAttrs, synth, false)
+			preserveCreatedFields(attrs, current.Attributes)
 		}
 
-		attrs.Set("id", *ctx.op.key)
+		attrs.Set("id", identityValue(*ctx.op.key))
 
 		marshaled, err := marshalJSValue(attrs)
 		if err != nil {
@@ -360,7 +371,7 @@ func (e *Engine) validationErrorResponse(ctx *storeCtx, errs []string) *RawRespo
 	var resp *RawResponse
 	for _, status := range validationErrorLadder {
 		if schema := errorSchema(ctx.endpoint, status); schema != nil {
-			synth := e.synthCtx("validation-error", strconv.Itoa(status))
+			synth := e.synthCtx("validation-error", strconv.Itoa(status)).forResponse(ctx.endpoint, status)
 			if body := synthesize(schema, synth, 0, ""); body != nil {
 				resp = jsonResponse(status, body, nil)
 				break
@@ -446,4 +457,31 @@ func (e *Engine) quotaGuard(resourceBytes, projectedCount, projectedBytes int64)
 		return buildErrorResponse(507, "Insufficient Storage", nil)
 	}
 	return nil
+}
+
+func (e *Engine) resourceIdentity(inner *ir.IrSchemaNode, ctx *synthContext, typ string, seq int64) (string, any, bool) {
+	resolved := derefSchema(inner, ctx, 0)
+	if resolved != nil {
+		for i := range resolved.Properties {
+			p := &resolved.Properties[i]
+			if p.Name != "id" {
+				continue
+			}
+			idSchema := derefSchema(&p.Schema, ctx, 0)
+			if idSchema != nil && (idSchema.Type.Value == "integer" || idSchema.Type.Value == "number") {
+				return strconv.FormatInt(seq, 10), int(seq), true
+			}
+			key := typeSlug(typ) + "_" + strconv.FormatInt(seq, 10)
+			return key, key, true
+		}
+	}
+	key := typeSlug(typ) + "_" + strconv.FormatInt(seq, 10)
+	return key, key, false
+}
+
+func identityValue(key string) any {
+	if n, err := strconv.Atoi(key); err == nil && strconv.Itoa(n) == key {
+		return n
+	}
+	return key
 }

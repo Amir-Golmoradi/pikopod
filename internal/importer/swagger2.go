@@ -70,7 +70,7 @@ var parameterTypeProperties = []string{
 	"format", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
 	"minLength", "maxLength", "multipleOf", "minItems", "maxItems",
 	"uniqueItems", "minProperties", "maxProperties", "additionalProperties",
-	"pattern", "enum", "default",
+	"pattern", "enum", "default", "example", "readOnly",
 }
 
 var httpMethodsLower = []string{"get", "post", "put", "delete", "patch", "head", "options", "trace"}
