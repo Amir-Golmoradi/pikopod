@@ -63,6 +63,11 @@ func scenarioEngine(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefiniti
 		st.Close()
 		return nil, nil, err
 	}
+	rules, err := rulesFor(cfg, entry)
+	if err != nil {
+		st.Close()
+		return nil, nil, err
+	}
 	eng, err := sandbox.NewEngine(def, sandbox.Config{
 		ID: id, Seed: entry.Seed, Mode: entry.Mode, VirtualClockMs: entry.CreatedClockMs,
 		Effective: effectiveFor(cfg, entry, contractVersion),
@@ -70,6 +75,7 @@ func scenarioEngine(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefiniti
 		WebhookURL:        entry.WebhookURL,
 		WebhookSigningKey: signingKey,
 		Recordings:        recordingsFor(cfg, entry),
+		Rules:             rules,
 	}, st)
 	if err != nil {
 		st.Close()

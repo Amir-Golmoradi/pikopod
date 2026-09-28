@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "unique-name",
+      "when": {
+        "method": "POST",
+        "path": "/widgets",
+        "body": {
+          "name": "exists_in_store"
+        }
+      },
+      "respond": {
+        "status": 422,
+        "body": {
+          "error": "name already taken"
+        }
+      },
+      "provenance": "manual",
+      "version": 1
+    },
+    {
+      "id": "freeze-on-zero",
+      "when": {
+        "method": "PATCH",
+        "path": "/widgets/{id}",
+        "body": {
+          "size": {
+            "equals": 0
+          }
+        }
+      },
+      "respond": {
+        "status": 200,
+        "body": {
+          "frozen": true
+        },
+        "set_state": {
+          "resource": "/widgets",
+          "state": "frozen"
+        }
+      },
+      "provenance": "manual",
+      "version": 1
+    },
+    {
+      "id": "frozen-reads",
+      "when": {
+        "method": "GET",
+        "path": "/widgets/{id}",
+        "state": {
+          "/widgets": {
+            "state_is": "frozen"
+          }
+        }
+      },
+      "respond": {
+        "status": 423,
+        "body": {
+          "error": "widget is frozen"
+        }
+      },
+      "provenance": "manual",
+      "version": 1
+    },
+    {
+      "id": "first-put-conflicts",
+      "when": {
+        "method": "PUT",
+        "path": "/widgets/{id}",
+        "times": 1,
+        "per": "resource"
+      },
+      "respond": {
+        "status": 409,
+        "body": {
+          "error": "try again"
+        }
+      },
+      "provenance": "manual",
+      "version": 1
+    }
+  ]
+}

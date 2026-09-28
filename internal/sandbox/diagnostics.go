@@ -12,6 +12,8 @@ const (
 	OperationHeader = "x-pikopod-operation"
 
 	ClosestHeader = "x-pikopod-closest"
+
+	RuleHeader = "x-pikopod-rule"
 )
 
 func operationLabel(endpoint *ir.Endpoint) string {

@@ -365,6 +365,41 @@ so a restart loses in-flight edges rather than persisting per-resource data.
 Fields the sanitizer tokenized or dropped are invisible; `volatile_fields`
 and `mute` apply here as everywhere else.
 
+## rules
+
+Rules live beside the IR in `data_dir/apis/<sandbox>.rules.json`, one
+versioned file per sandbox, written atomically. A rule answers a declared
+operation with a fixed status, headers and body when the request or the stored
+state looks a certain way. Rules are evaluated after auth and faults and
+before the operation, in file order; the first match wins.
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "unique-reference",
+      "version": 1,
+      "provenance": "manual",
+      "when": { "method": "POST", "path": "/charges", "body": { "reference": "exists_in_store" } },
+      "respond": { "status": 422, "body": { "error": { "code": "reference_taken" } } }
+    }
+  ]
+}
+```
+
+`when` carries `method`, `path` (the template as in the spec), `body` (field
+to matcher: `exists`, `absent`, `exists_in_store`, `{"equals": v}`), `state`
+(resource type to `{"state_is": s}` or `{"state_not": s}`), and `times`/`per`
+windows as for faults. `respond` carries `status`, optional `headers`, either
+`body` (literal JSON) or `example` (the status whose declared example to
+serve), optional `set_state: {resource, state}` and optional `emit: <declared
+event>`. `provenance` is `manual`, `promoted:<fp>` or `imported:<fp>`.
+
+A rule that names a route, an event or an example the spec does not declare
+is refused when the sandbox loads, and the error names the rule. The full
+matcher table is on the docs site under Sandbox, Rules.
+
 ## quotas
 
 Sandbox resource limits, fixed rather than configured:
