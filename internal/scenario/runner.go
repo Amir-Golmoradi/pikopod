@@ -367,7 +367,7 @@ func (r *runner) request(step *Step) (stepOutcome, error) {
 	for k, v := range respHeaders {
 		headersDoc[k] = v
 	}
-	captures, err := applyCaptures(step.Capture, captureDocuments{
+	captures, resolvedPaths, err := applyCaptures(step.Capture, captureDocuments{
 		"response.body":    respBody,
 		"response.headers": headersDoc,
 	})
@@ -393,6 +393,7 @@ func (r *runner) request(step *Step) (stepOutcome, error) {
 			"request":    map[string]any{"method": cfg.Method, "path": path, "headers": headers, "query": query.Encode(), "body": body},
 			"response":   map[string]any{"status": status, "headers": respHeaders, "body": respBody},
 			"assertions": verdict.Results,
+			"captures":   resolvedPaths,
 		},
 	}, nil
 }
@@ -437,7 +438,7 @@ func (r *runner) expectWebhook(step *Step) (stepOutcome, error) {
 	captures := map[string]any{}
 	if len(payloads) > 0 {
 		var err error
-		captures, err = applyCaptures(step.Capture, captureDocuments{"webhook.delivery": payloads[0]})
+		captures, _, err = applyCaptures(step.Capture, captureDocuments{"webhook.delivery": payloads[0]})
 		if err != nil {
 			return stepOutcome{}, err
 		}

@@ -44,7 +44,8 @@ const catalogueJSON = `[
     "title": "Invalid request",
     "description": "A create with a missing required field is rejected with a 4xx.",
     "expects": ["SANDBOX"],
-    "requires": [{ "role": "op", "bind": "operation", "match": { "crud": "CREATE", "hasErrorResponseClass": "4XX" } }],
+    "requires": [{ "role": "op", "bind": "operation", "match": { "crud": "CREATE", "hasErrorResponseClass": "4XX", "hasRequiredRequestField": true } }],
+    "rawBodies": true,
     "requiresFidelity": "L1",
     "expands": [
       {

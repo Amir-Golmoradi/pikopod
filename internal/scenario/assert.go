@@ -360,12 +360,12 @@ func resolveBody(body any, present bool, path *string) (bool, any, *string) {
 	if path == nil {
 		return true, body, &root
 	}
-	found, value, err := getByPath(body, *path)
-	if err != nil {
+	if _, _, err := getByPath(body, *path); err != nil {
 
 		return false, nil, path
 	}
-	return found, value, path
+	found, value, resolved := resolveThroughEnvelope(body, *path)
+	return found, value, &resolved
 }
 
 func EvaluateAssertion(a *Assertion, docs *EvalDocs, subjectsPresent []string) AssertionResult {

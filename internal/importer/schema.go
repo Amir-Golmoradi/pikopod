@@ -21,6 +21,9 @@ var constraintKeys = []string{
 	"uniqueItems",
 	"minProperties",
 	"maxProperties",
+	"example",
+	"default",
+	"readOnly",
 }
 
 var compositionKinds = []string{"allOf", "oneOf", "anyOf"}

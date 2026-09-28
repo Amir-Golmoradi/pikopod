@@ -74,7 +74,7 @@ func resourceKeys(provided *JSONObject, requestSchema *ir.IrSchemaNode, ctx *syn
 }
 
 func (e *Engine) wrapStored(endpoint *ir.Endpoint, status int, raw json.RawMessage, seedParts ...string) any {
-	ctx := e.synthCtx(append([]string{"wrap"}, seedParts...)...)
+	ctx := e.synthCtx(append([]string{"wrap"}, seedParts...)...).forResponse(endpoint, status)
 	var keys []string
 	if obj, ok := parseJSONValueOK(raw); ok {
 		keys = obj.Keys()

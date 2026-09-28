@@ -5,7 +5,7 @@
     "virtualClockMs": 1735689600000,
     "credential": "pikopod_sbx_test_d379d059bd91179fb417d581290c3dfbfd5bb1ad64c7b2d1",
     "normalizedPaths": [
-      "steps[*].reqHeaders.* == meta.credential -> \"$CREDENTIAL\" (TS mints issued tokens via randomBytes; the replayer substitutes the engine credential)"
+      "steps[*].reqHeaders.* == meta.credential -\u003e \"$CREDENTIAL\" (TS mints issued tokens via randomBytes; the replayer substitutes the engine credential)"
     ]
   },
   "steps": [
@@ -24,7 +24,40 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": true,
+        "name": "parity-role-1",
+        "roleId": 130,
+        "groups": [
+          {
+            "name": "BuildEnvironment",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "Users",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "read-created",
@@ -39,7 +72,40 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": true,
+        "name": "parity-role-1",
+        "roleId": 130,
+        "groups": [
+          {
+            "name": "BuildEnvironment",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "Users",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "list-read-your-write",
@@ -54,7 +120,40 @@
         "content-type": "application/json; charset=utf-8"
       },
       "respBody": [
-        {}
+        {
+          "created": "2025-01-01T00:00:00.000Z",
+          "updated": "2025-01-01T00:00:00.000Z",
+          "isSystem": true,
+          "name": "parity-role-1",
+          "roleId": 130,
+          "groups": [
+            {
+              "name": "BuildEnvironment",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            },
+            {
+              "name": "Users",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     {
@@ -72,7 +171,31 @@
       "respHeaders": {
         "content-type": "application/json; charset=utf-8"
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "dqmsc",
+        "roleId": 886,
+        "groups": [
+          {
+            "name": null,
+            "permissions": [
+              null,
+              null,
+              null
+            ]
+          },
+          {
+            "name": null,
+            "permissions": [
+              null,
+              null,
+              null
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "delete-role",
@@ -99,7 +222,7 @@
         "content-type": "application/json; charset=utf-8"
       },
       "respBody": {
-        "message": "hnlzxdxnn",
+        "message": "Not Found",
         "modelState": {}
       }
     },
@@ -159,8 +282,8 @@
       "reqBody": null,
       "status": 405,
       "respHeaders": {
-        "content-type": "application/json; charset=utf-8",
-        "allow": "GET, POST, PUT"
+        "allow": "GET, POST, PUT",
+        "content-type": "application/json; charset=utf-8"
       },
       "respBody": {
         "message": "Method Not Allowed"
@@ -195,7 +318,50 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "page-a",
+        "roleId": 7,
+        "groups": [
+          {
+            "name": "BuildEnvironment",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "Environments",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "page-seed-2",
@@ -212,7 +378,65 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "page-b",
+        "roleId": 356,
+        "groups": [
+          {
+            "name": "BuildEnvironment",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "Deny",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "BuildEnvironment",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "page-seed-3",
@@ -229,7 +453,40 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "page-c",
+        "roleId": 12,
+        "groups": [
+          {
+            "name": "Projects",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          },
+          {
+            "name": "Environments",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "list-page-1",
@@ -242,17 +499,118 @@
       "status": 200,
       "respHeaders": {
         "content-type": "application/json; charset=utf-8",
-        "link": "</roles?limit=2&cursor=cm9sZXNfMw>; rel=\"next\""
+        "link": "\u003c/roles?limit=2\u0026cursor=cm9sZXNfMw\u003e; rel=\"next\""
       },
       "respBody": [
-        {},
-        {}
+        {
+          "created": "2025-01-01T00:00:00.000Z",
+          "updated": "2025-01-01T00:00:00.000Z",
+          "isSystem": false,
+          "name": "page-a",
+          "roleId": 7,
+          "groups": [
+            {
+              "name": "BuildEnvironment",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            },
+            {
+              "name": "Environments",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "created": "2025-01-01T00:00:00.000Z",
+          "updated": "2025-01-01T00:00:00.000Z",
+          "isSystem": false,
+          "name": "page-b",
+          "roleId": 356,
+          "groups": [
+            {
+              "name": "BuildEnvironment",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            },
+            {
+              "name": "Deny",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            },
+            {
+              "name": "BuildEnvironment",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     {
       "name": "list-page-2",
       "method": "GET",
-      "path": "/roles?limit=2&cursor=cm9sZXNfMw",
+      "path": "/roles?limit=2\u0026cursor=cm9sZXNfMw",
       "reqHeaders": {
         "authorization": "$CREDENTIAL"
       },
@@ -262,7 +620,40 @@
         "content-type": "application/json; charset=utf-8"
       },
       "respBody": [
-        {}
+        {
+          "created": "2025-01-01T00:00:00.000Z",
+          "updated": "2025-01-01T00:00:00.000Z",
+          "isSystem": false,
+          "name": "page-c",
+          "roleId": 12,
+          "groups": [
+            {
+              "name": "Projects",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                },
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            },
+            {
+              "name": "Environments",
+              "permissions": [
+                {
+                  "allowed": null,
+                  "description": null,
+                  "name": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     {
@@ -281,7 +672,35 @@
         "content-type": "application/json; charset=utf-8",
         "etag": "\"0\""
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "idem-role",
+        "roleId": 727,
+        "groups": [
+          {
+            "name": "Environments",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "idempotent-replay",
@@ -299,7 +718,35 @@
         "content-type": "application/json; charset=utf-8",
         "idempotent-replayed": "true"
       },
-      "respBody": {}
+      "respBody": {
+        "created": "2025-01-01T00:00:00.000Z",
+        "updated": "2025-01-01T00:00:00.000Z",
+        "isSystem": false,
+        "name": "idem-role",
+        "roleId": 727,
+        "groups": [
+          {
+            "name": "Environments",
+            "permissions": [
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              },
+              {
+                "allowed": null,
+                "description": null,
+                "name": null
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "idempotent-conflict-422",

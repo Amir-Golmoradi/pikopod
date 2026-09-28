@@ -39,6 +39,7 @@ type opFact struct {
 	has5xx         bool
 	requiresAuth   bool
 	hasEnumField   bool
+	hasRequired    bool
 	inferred       bool
 }
 
@@ -138,10 +139,14 @@ func buildOpFacts(apiDef *ir.ApiDefinition) []opFact {
 				schemas = append(schemas, &e.Responses[j].Content[k].Schema)
 			}
 		}
+		hasRequired := false
 		if e.RequestBody != nil {
 			var reqSchemas []*ir.IrSchemaNode
 			for k := range e.RequestBody.Content {
 				reqSchemas = append(reqSchemas, &e.RequestBody.Content[k].Schema)
+				if schemaHasRequired(&e.RequestBody.Content[k].Schema, named, 0) {
+					hasRequired = true
+				}
 			}
 			schemas = append(reqSchemas, schemas...)
 		}
@@ -166,6 +171,7 @@ func buildOpFacts(apiDef *ir.ApiDefinition) []opFact {
 			has5xx:         statusHasClass(codes, '5'),
 			requiresAuth:   len(e.Security) > 0,
 			hasEnumField:   hasEnum,
+			hasRequired:    hasRequired,
 			inferred:       e.Method.IsUncertain(),
 		})
 	}
@@ -190,6 +196,9 @@ func opMatches(fact *opFact, req *RoleRequirement, partial map[string]any) bool 
 		return false
 	}
 	if m.HasEnumField && !fact.hasEnumField {
+		return false
+	}
+	if m.HasRequiredRequestField && !fact.hasRequired {
 		return false
 	}
 	if m.SameResourceAs != "" {
@@ -371,8 +380,52 @@ func matchJSONString(m *RoleMatch) string {
 	if m.HasEnumField {
 		add("hasEnumField", true)
 	}
+	if m.HasRequiredRequestField {
+		add("hasRequiredRequestField", true)
+	}
 	if m.SameResourceAs != "" {
 		add("sameResourceAs", m.SameResourceAs)
 	}
 	return "{" + strings.Join(parts, ",") + "}"
+}
+
+func schemaHasRequired(schema *ir.IrSchemaNode, named map[string]*ir.IrSchemaNode, depth int) bool {
+	if schema == nil || depth > 6 {
+		return false
+	}
+	for hops := 0; schema.Ref != nil && hops < 10; hops++ {
+		target, ok := named[*schema.Ref]
+		if !ok {
+			return false
+		}
+		schema = target
+	}
+	if schema.Composition != nil && len(schema.Composition.Members) > 0 {
+		return schemaHasRequired(&schema.Composition.Members[0], named, depth+1)
+	}
+	for i := range schema.Properties {
+		p := &schema.Properties[i]
+		if !p.Required.Value {
+			continue
+		}
+		if p.Name == "id" {
+			continue
+		}
+		if v, ok := constraintValue(&p.Schema, "readOnly"); ok {
+			if b, isBool := v.(bool); isBool && b {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func constraintValue(schema *ir.IrSchemaNode, key string) (any, bool) {
+	for _, c := range schema.Constraints {
+		if c.Key == key {
+			return c.Value.Value, true
+		}
+	}
+	return nil, false
 }
