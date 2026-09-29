@@ -47,8 +47,8 @@ python3 mkcast.py
 agg --theme asciinema --font-size 15 --fps-cap 8 demo.cast demo.gif
 ```
 
-Copy `demo.cast`, `demo.gif`, `out_import.txt`, `out_list.txt` and `out_run.txt`,
-`out_incidents.txt` and `out_reproduce.txt` back over the ones here.
+Copy `demo.cast`, `demo.gif`, `out_list.txt` and `out_run.txt` back over the
+ones here.
 
 Run it in a scratch directory, not the repo: `pikopod init` writes a
 `pikopod.yaml` and a `pikopod-data/` where you stand.
