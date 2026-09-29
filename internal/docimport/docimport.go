@@ -23,17 +23,25 @@ type Result struct {
 	Method string
 	Source string
 
-	Skipped []string
+	Skipped        []string
+	Dropped        []string
+	Unretried      []string
+	ReferencePages int
+	Endpoints      int
+	Retried        int
+	Recovered      int
 }
 
 const (
 	maxHopPages       = 8
+	maxContextPages   = 64
+	maxSoloRetries    = 12
 	maxCorpusBytes    = 240 << 10
 	maxPageBytes      = 2 << 20
 	llmMaxTokens      = 64000
 	maxBatchBytes     = 36 << 10
 	llmExtractTimeout = 8 * time.Minute
-	llmInstruction    = "You convert REST API documentation text into ONE OpenAPI 3.0 JSON document. The pages may cover only PART of the API — extract exactly what these pages describe; other pages are handled separately. Include ONLY endpoints, parameters, request/response fields, auth schemes, and status codes explicitly described in the text — NEVER invent endpoints or fields. Use best-effort JSON schemas from described fields and examples. servers: use the base URL if stated. WEBHOOKS: when the documentation describes webhook events, add a top-level \"webhooks\" object — one key per documented EVENT NAME (e.g. \"payment_intent.completed\"), each {\"post\": {\"requestBody\": {\"content\": {\"application/json\": {\"schema\": <the documented payload schema>}}}, \"responses\": {\"200\": {\"description\": \"ack\"}}, \"x-pikopod-trigger\": {\"method\": \"<http method>\", \"path\": \"<endpoint path>\"}}} where x-pikopod-trigger names the API operation the docs say fires that event (omit it when the docs do not say). Output ONLY the JSON document."
+	llmInstruction    = "You convert REST API documentation text into ONE OpenAPI 3.0 JSON document. The pages may cover only PART of the API — extract exactly what these pages describe; other pages are handled separately. Each page carries a kind: \"reference\" pages document endpoints and are the ONLY source of paths — every reference page documents at least one operation, so emit one path item for each reference page you are given, under the exact method and path it states, and put the page's url on every operation as \"x-pikopod-source\"; \"context\" pages (guides, limits, channel lists, flows) may only contribute enums, minimum/maximum limits, descriptions and webhook payloads, NEVER endpoints or paths; \"webhook\" pages document webhook events. Include ONLY endpoints, parameters, request/response fields, auth schemes, and status codes explicitly described in the text — NEVER invent endpoints or fields. AUTH: emit every documented scheme under components.securitySchemes with its exact mechanism — apiKey in header with the exact header name (one scheme per header), http bearer, http basic — and when operations differ, set per-operation security listing the schemes that operation needs. HEADERS: every required non-auth header (request ids, idempotency keys) becomes a required header parameter on the operations that need it. EXAMPLES: whenever a page shows an example request or response body, attach it verbatim as \"example\" on that media type object, and copy field values into property-level \"example\" where a field shows one; never fabricate an example. servers: only when the page states an API base URL that is not the documentation site itself; otherwise omit servers. WEBHOOKS: when the documentation describes webhook events, add a top-level \"webhooks\" object — one key per documented EVENT NAME (e.g. \"payment_intent.completed\"), each {\"post\": {\"requestBody\": {\"content\": {\"application/json\": {\"schema\": <the documented payload schema>}}}, \"responses\": {\"200\": {\"description\": \"ack\"}}, \"x-pikopod-trigger\": {\"method\": \"<http method>\", \"path\": \"<endpoint path>\"}}} where x-pikopod-trigger names the API operation the docs say fires that event (omit it when the docs do not say). Output ONLY the JSON document."
 )
 
 var (
@@ -110,8 +118,17 @@ func FromDocsURL(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*R
 
 type page struct {
 	URL  string `json:"url"`
+	Kind string `json:"kind"`
 	Text string `json:"text"`
 }
+
+const (
+	kindReference = "reference"
+	kindWebhook   = "webhook"
+	kindContext   = "context"
+)
+
+var pageKinds = []string{kindWebhook, kindReference, kindContext}
 
 func (p page) size() int    { return len(p.Text) }
 func (p page) name() string { return p.URL }
@@ -119,7 +136,7 @@ func (p page) name() string { return p.URL }
 func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Result, error) {
 	var corpus []page
 	size := 0
-	add := func(url, text string) {
+	add := func(url, kind, text string) {
 		if len(strings.TrimSpace(text)) == 0 || size >= maxCorpusBytes {
 			return
 		}
@@ -129,32 +146,32 @@ func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Re
 		if size+len(text) > maxCorpusBytes {
 			text = text[:maxCorpusBytes-size]
 		}
-		corpus = append(corpus, page{URL: url, Text: text})
+		corpus = append(corpus, page{URL: url, Kind: kind, Text: text})
 		size += len(text)
 	}
 
 	var skipped []string
 	if groups := llmsTxtGroups(pageURL, fetch); len(groups) > 0 {
 		var fetched [][]page
-		for _, group := range groups {
+		for g, group := range groups {
 			var pages []page
 			for _, link := range group {
 				raw, err := fetch(link)
 				if err != nil || len(strings.TrimSpace(string(raw))) == 0 {
 					continue
 				}
-				pages = append(pages, page{URL: link, Text: string(raw)})
+				pages = append(pages, page{URL: link, Kind: pageKinds[g], Text: string(raw)})
 			}
 			fetched = append(fetched, pages)
 		}
 		chosen, left := planCorpus(fetched, maxCorpusBytes, corpusShares)
 		for _, p := range chosen {
-			add(p.URL, p.Text)
+			add(p.URL, p.Kind, p.Text)
 		}
 		skipped = left
 	}
 	if len(corpus) == 0 {
-		add(pageURL, htmlToText(html))
+		add(pageURL, kindReference, htmlToText(html))
 		for _, link := range hopLinks(docPageLinkRe, html, pageURL, maxHopPages) {
 			if size >= maxCorpusBytes {
 				break
@@ -163,7 +180,14 @@ func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Re
 			if err != nil {
 				continue
 			}
-			add(link, htmlToText(raw))
+			add(link, kindReference, htmlToText(raw))
+		}
+	}
+	promoteContextWhenNothingElse(corpus)
+	referencePages := 0
+	for _, p := range corpus {
+		if p.Kind == kindReference {
+			referencePages++
 		}
 	}
 
@@ -176,6 +200,7 @@ func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Re
 	}
 
 	var merged map[string]any
+	var dropped []string
 	extracted, failed := 0, 0
 	for _, batch := range batchPages(corpus, maxBatchBytes) {
 		payload, err := json.Marshal(map[string]any{"documentation_pages": batch})
@@ -193,6 +218,10 @@ func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Re
 			continue
 		}
 		extracted++
+		if !batchDefinesEndpoints(batch) {
+			dropped = append(dropped, operationLabels(doc)...)
+			delete(doc, "paths")
+		}
 		if merged == nil {
 			merged = doc
 			continue
@@ -211,14 +240,134 @@ func llmExtract(pageURL string, html []byte, fetch Fetcher, llm *nl.Client) (*Re
 	if merged == nil {
 		return nil, errfmt.New("model-assisted extraction produced nothing", fmt.Sprintf("%d batch(es) all failed", failed), "retry, or try another llm.model", "docs/config-reference.md#llm")
 	}
+	if _, has := merged["paths"]; !has {
+		merged["paths"] = map[string]any{}
+	}
+	retried, recovered, unretried := retryEmptyReferencePages(corpus, merged, llm)
 	cleanPathKeys(merged)
+	dropDocsHostServers(merged, pageURL)
 
 	inlineRequestBodyRefs(merged)
 	spec, err := json.Marshal(merged)
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Spec: spec, Method: "llm-extracted", Source: fmt.Sprintf("%s (+%d pages, %d/%d batches)", pageURL, len(corpus)-1, extracted, extracted+failed), Skipped: skipped}, nil
+	sort.Strings(dropped)
+	return &Result{Spec: spec, Method: "llm-extracted", Source: fmt.Sprintf("%s (+%d pages, %d/%d batches)", pageURL, len(corpus)-1, extracted, extracted+failed),
+		Skipped: skipped, Dropped: dropped, Unretried: unretried, ReferencePages: referencePages,
+		Endpoints: len(operationLabels(merged)), Retried: retried, Recovered: recovered}, nil
+}
+
+var methodTokenRe = regexp.MustCompile(`\b(GET|POST|PUT|PATCH|DELETE)\b`)
+
+func coveredSources(doc map[string]any) map[string]bool {
+	out := map[string]bool{}
+	paths, _ := doc["paths"].(map[string]any)
+	for _, item := range paths {
+		ops, _ := item.(map[string]any)
+		for method, op := range ops {
+			if !pathItemKeys[strings.ToLower(method)] || method == "parameters" {
+				continue
+			}
+			if m, ok := op.(map[string]any); ok {
+				if src, ok := m["x-pikopod-source"].(string); ok {
+					out[strings.TrimRight(src, "/")] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+func retryEmptyReferencePages(corpus []page, merged map[string]any, llm *nl.Client) (retried, recovered int, unretried []string) {
+	covered := coveredSources(merged)
+	for _, p := range corpus {
+		if p.Kind != kindReference || covered[strings.TrimRight(p.URL, "/")] || !methodTokenRe.MatchString(p.Text) {
+			continue
+		}
+		if retried >= maxSoloRetries {
+			unretried = append(unretried, p.URL)
+			continue
+		}
+		retried++
+		payload, err := json.Marshal(map[string]any{"documentation_pages": []page{p}})
+		if err != nil {
+			continue
+		}
+		candidate, err := llm.CompleteJSON(context.Background(), llmInstruction, string(payload))
+		if err != nil {
+			continue
+		}
+		doc, ok := candidate.(map[string]any)
+		if !ok || len(operationLabels(doc)) == 0 {
+			continue
+		}
+		recovered++
+		mergeMapField(merged, doc, "paths")
+		mergeMapField(merged, doc, "webhooks")
+		mergeComponents(merged, doc)
+	}
+	return retried, recovered, unretried
+}
+
+func promoteContextWhenNothingElse(corpus []page) {
+	for _, p := range corpus {
+		if p.Kind == kindReference {
+			return
+		}
+	}
+	for i := range corpus {
+		if corpus[i].Kind == kindContext {
+			corpus[i].Kind = kindReference
+		}
+	}
+}
+
+func batchDefinesEndpoints(batch []page) bool {
+	for _, p := range batch {
+		if p.Kind == kindReference {
+			return true
+		}
+	}
+	return false
+}
+
+func operationLabels(doc map[string]any) []string {
+	paths, _ := doc["paths"].(map[string]any)
+	var out []string
+	for path, item := range paths {
+		ops, _ := item.(map[string]any)
+		for method := range ops {
+			if method == "parameters" {
+				continue
+			}
+			out = append(out, strings.ToUpper(method)+" "+path)
+		}
+	}
+	return out
+}
+
+func dropDocsHostServers(doc map[string]any, pageURL string) {
+	docs, err := url.Parse(pageURL)
+	if err != nil {
+		return
+	}
+	servers, _ := doc["servers"].([]any)
+	var kept []any
+	for _, s := range servers {
+		entry, _ := s.(map[string]any)
+		raw, _ := entry["url"].(string)
+		u, err := url.Parse(raw)
+		if err != nil || raw == "" || strings.EqualFold(u.Host, docs.Host) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	if len(kept) == 0 {
+		delete(doc, "servers")
+		return
+	}
+	doc["servers"] = kept
 }
 
 func batchPages[T any](pages []T, limit int) [][]T {
@@ -291,23 +440,34 @@ func llmsTxtGroups(pageURL string, fetch Fetcher) [][]string {
 		if err != nil || lu.Host != u.Host {
 			continue
 		}
-		if total >= 3*maxHopPages {
-			break
-		}
-		total++
-		switch {
-		case strings.Contains(link, "webhook") || strings.Contains(link, "event-types") || strings.Contains(link, "/events"):
+		switch classifyLink(link) {
+		case kindWebhook:
 			hookPages = append(hookPages, link)
-		case strings.Contains(link, "api-reference") || strings.Contains(link, "/reference"):
+		case kindReference:
 			apiPages = append(apiPages, link)
 		default:
+			if len(rest) >= maxContextPages {
+				continue
+			}
 			rest = append(rest, link)
 		}
+		total++
 	}
 	if total == 0 {
 		return nil
 	}
 	return [][]string{hookPages, apiPages, rest}
+}
+
+func classifyLink(link string) string {
+	lower := strings.ToLower(link)
+	switch {
+	case strings.Contains(lower, "webhook") || strings.Contains(lower, "event-types") || strings.Contains(lower, "/events"):
+		return kindWebhook
+	case strings.Contains(lower, "api-reference") || strings.Contains(lower, "/reference") || strings.Contains(lower, "/endpoints") || strings.Contains(lower, "/api/"):
+		return kindReference
+	}
+	return kindContext
 }
 
 func planCorpus[P interface {
@@ -503,6 +663,8 @@ func inlineRequestBodyRefs(doc map[string]any) {
 	}
 }
 
+var pathItemKeys = map[string]bool{"get": true, "post": true, "put": true, "patch": true, "delete": true, "head": true, "options": true, "trace": true, "parameters": true, "summary": true, "description": true, "servers": true}
+
 func cleanPathKeys(doc map[string]any) {
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
@@ -510,6 +672,16 @@ func cleanPathKeys(doc map[string]any) {
 	}
 	cleaned := map[string]any{}
 	for key, item := range paths {
+		if !strings.HasPrefix(key, "/") {
+			continue
+		}
+		if itemMap, isMap := item.(map[string]any); isMap {
+			for k := range itemMap {
+				if !pathItemKeys[strings.ToLower(k)] {
+					delete(itemMap, k)
+				}
+			}
+		}
 		path, query := key, ""
 		if i := strings.IndexByte(key, '?'); i >= 0 {
 			path, query = key[:i], key[i+1:]

@@ -119,6 +119,19 @@ func loadSpec(cfg *config.Config, source string, out io.Writer) ([]byte, string,
 		if res.Method == "llm-extracted" {
 			fmt.Fprintln(out, "note: this contract was EXTRACTED BY YOUR LLM from prose — it imports as DRAFT with LLM_EXTRACTED provenance; `pikopod sandbox list` shows the marking")
 		}
+		if res.ReferencePages > 0 {
+			line := fmt.Sprintf("  reference pages: %d, endpoints: %d", res.ReferencePages, res.Endpoints)
+			if res.Retried > 0 {
+				line += fmt.Sprintf(", retried %d page(s) alone, recovered %d", res.Retried, res.Recovered)
+			}
+			fmt.Fprintln(out, line)
+		}
+		if len(res.Unretried) > 0 {
+			fmt.Fprintf(out, "  ⚠ %d reference page(s) yielded no endpoint and were past the retry cap: %s\n", len(res.Unretried), strings.Join(res.Unretried, ", "))
+		}
+		if len(res.Dropped) > 0 {
+			fmt.Fprintf(out, "  dropped %d endpoint(s) described only by guide pages, never by a reference page: %s\n", len(res.Dropped), strings.Join(res.Dropped, ", "))
+		}
 		if len(res.Skipped) > 0 {
 			fmt.Fprintf(out, "  ⚠ %d indexed page(s) did not fit the extraction budget, so the spec is partial:\n", len(res.Skipped))
 			for _, p := range res.Skipped {
