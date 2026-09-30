@@ -280,14 +280,22 @@ func newScenarioCmd() *cobra.Command {
 
 	list := &cobra.Command{Use: "list <sandbox>", Short: "Show which archetypes bind to this sandbox's API, plus saved packs", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			format, _ := cmd.Flags().GetString("format")
+			if format != "text" && format != "json" {
+				return errfmt.New("unknown --format", fmt.Sprintf("%q is not text or json", format), "pass --format text or --format json", "scenarios/README.md")
+			}
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
 			}
 			verbose, _ := cmd.Flags().GetBool("verbose")
+			if format == "json" {
+				return scenarioListJSON(cfg, args[0], cmd.OutOrStdout())
+			}
 			return scenarioList(cfg, args[0], verbose, cmd.OutOrStdout())
 		}}
 	list.Flags().BoolP("verbose", "v", false, "show which operations each archetype bound to")
+	list.Flags().String("format", "text", "output format: text | json")
 
 	run := &cobra.Command{Use: "check <sandbox> <scenarios...>", Aliases: []string{"run"}, Short: "Bind, expand, and run scenarios (exit 0 pass / 1 fail / 2 error)", Args: cobra.MinimumNArgs(2),
 		PreRun: func(cmd *cobra.Command, _ []string) {
