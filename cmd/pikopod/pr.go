@@ -105,7 +105,7 @@ func newPROpenCmd() *cobra.Command {
 			}
 
 			if strings.HasPrefix(branch, "-") || strings.HasPrefix(base, "-") {
-				return errfmt.New("invalid branch name", "branch/base names may not start with '-'", "pick a name like pikopod/spec-update", "")
+				return errfmt.New("invalid branch name", "branch/base names may not start with '-'", "pick a name like pikopod/spec-update", "docs/config-reference.md#pr")
 			}
 			if title == "" {
 				title = "pikopod: traffic-evidenced spec update"
@@ -233,7 +233,7 @@ func forgeFromFlagsOpts(cmd *cobra.Command, needNumber bool) (pr.Forge, string, 
 		}
 		return &pr.GitLab{BaseURL: api, Project: repo, Number: number, Token: token}, sha, nil
 	}
-	return nil, "", errfmt.New("unknown platform "+platform, "supported: github, gitlab", "", "")
+	return nil, "", errfmt.New("unknown platform "+platform, "supported: github, gitlab", "", "docs/config-reference.md#pr")
 }
 
 func firstEnv(names ...string) string {
@@ -268,7 +268,7 @@ func runCmd(argv []string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return errfmt.New(strings.Join(argv[:2], " ")+" failed", strings.TrimSpace(stderr.String()), "fix the git state and retry", "")
+		return errfmt.New(strings.Join(argv[:2], " ")+" failed", strings.TrimSpace(stderr.String()), "fix the git state and retry", "docs/config-reference.md#pr")
 	}
 	return nil
 }

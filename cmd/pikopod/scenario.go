@@ -30,7 +30,7 @@ func loadSandboxDef(cfg *config.Config, name string) (*sandboxEntry, *ir.ApiDefi
 	}
 	entry := findEntry(entries, name)
 	if entry == nil {
-		return nil, nil, errfmt.New("unknown sandbox", fmt.Sprintf("%q is not registered", name), "see `pikopod sandbox list`; add it with `pikopod sandbox add`", "")
+		return nil, nil, errfmt.New("unknown sandbox", fmt.Sprintf("%q is not registered", name), "see `pikopod sandbox list`; add it with `pikopod sandbox add`", "scenarios/README.md#where-packs-come-from")
 	}
 	raw, err := os.ReadFile(filepath.Join(cfg.DataDir, entry.IRFile))
 	if err != nil {
@@ -165,7 +165,7 @@ func coerceInputs(def *scenario.ScenarioDefinition, kvs []string) (map[string]an
 	for _, kv := range kvs {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
-			return nil, errfmt.New("bad --input", fmt.Sprintf("%q is not key=value", kv), "pass inputs as --input name=value", "")
+			return nil, errfmt.New("bad --input", fmt.Sprintf("%q is not key=value", kv), "pass inputs as --input name=value", "scenarios/README.md#where-packs-come-from")
 		}
 		typ := "string"
 		for _, d := range def.Inputs {
@@ -216,7 +216,7 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 	for _, kv := range bindKVs {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
-			return errfmt.New("bad --bind", fmt.Sprintf("%q is not role=operation", kv), "pass bindings as --bind role=operationId", "")
+			return errfmt.New("bad --bind", fmt.Sprintf("%q is not role=operation", kv), "pass bindings as --bind role=operationId", "scenarios/README.md#archetypes-start-here")
 		}
 		bindOverrides[k] = v
 	}
@@ -230,7 +230,7 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 		for _, kv := range targetHeaderKVs {
 			k, v, ok := strings.Cut(kv, ":")
 			if !ok {
-				return errfmt.New("bad --target-header", fmt.Sprintf("%q is not Name:value", kv), "pass headers as --target-header 'Authorization:Bearer …'", "")
+				return errfmt.New("bad --target-header", fmt.Sprintf("%q is not Name:value", kv), "pass headers as --target-header 'Authorization:Bearer …'", "scenarios/README.md#running-against-a-real-endpoint")
 			}
 			headers[strings.TrimSpace(k)] = strings.TrimSpace(v)
 		}
@@ -355,7 +355,7 @@ func scenarioCreate(cmd *cobra.Command, args []string) error {
 
 	chosen := resolve.Find(intent.ArchetypeID)
 	if chosen == nil {
-		return errfmt.New("the model chose an unknown archetype", intent.ArchetypeID, "retry; if it persists, file an issue with the description you used", "")
+		return errfmt.New("the model chose an unknown archetype", intent.ArchetypeID, "retry; if it persists, file an issue with the description you used", "scenarios/README.md#archetypes-start-here")
 	}
 	usesInferred, valid := resolve.CandidateMatch(chosen, def, intent.Bindings)
 	if !valid {
@@ -369,7 +369,7 @@ func scenarioCreate(cmd *cobra.Command, args []string) error {
 	definition := weaveAssertions(exp.Definition, intent)
 	vr, _ := scenario.ValidateScenario(definition, def)
 	if !vr.Valid {
-		return errfmt.New("the drafted scenario does not validate", vr.Errors[0].Message, "retry; if it persists, file an issue with the description you used", "")
+		return errfmt.New("the drafted scenario does not validate", vr.Errors[0].Message, "retry; if it persists, file an issue with the description you used", "scenarios/README.md#writing-a-pack-by-hand")
 	}
 
 	pack := map[string]any{
