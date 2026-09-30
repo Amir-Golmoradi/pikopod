@@ -219,9 +219,12 @@ func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed 
 	case matchersMatched > 0 && assertionsEvaluated == 0:
 		res.Status = RunPassed
 		res.Summary = fmt.Sprintf("%d matcher(s) matched in order", matchersMatched)
+	case matchersMatched > 0:
+		res.Status = RunPassed
+		res.Summary = fmt.Sprintf("%d assertion(s) passed; %d matcher(s) matched in order; %d not evaluated", assertionsEvaluated, matchersMatched, notEvaluated)
 	case evaluated > 0:
 		res.Status = RunPassed
-		res.Summary = fmt.Sprintf("%d assertion(s) passed; %d not evaluated", evaluated, notEvaluated)
+		res.Summary = fmt.Sprintf("%d assertion(s) passed; %d not evaluated", assertionsEvaluated, notEvaluated)
 	default:
 		res.Status = RunConditionGenerated
 		res.Summary = fmt.Sprintf("%d step(s) ran; %d assertion(s) not evaluated (no evaluable subject)", len(def.Steps), notEvaluated)

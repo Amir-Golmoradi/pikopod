@@ -57,6 +57,35 @@ func TestVerifySequenceSummaryCountsMatchers(t *testing.T) {
 	}
 }
 
+func TestVerifySequenceSummarySeparatesMatchersFromAssertions(t *testing.T) {
+	def := parseDef(t, `{
+	  "steps": [
+	    {"key": "check", "type": "REQUEST",
+	     "assertions": [{"target": "response.status", "op": "equals", "expected": 200}],
+	     "config": {"method": "GET", "path": "/widgets"}},
+	    {"key": "a1", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "a2", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "a3", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "seq", "type": "VERIFY_SEQUENCE",
+	     "config": {"requests": [
+	       {"method": "POST", "path": "/widgets"},
+	       {"method": "POST", "path": "/widgets"},
+	       {"method": "POST", "path": "/widgets"}
+	     ]}}
+	  ]
+	}`)
+	res, err := Run(runnerEngine(t, "vs-mixed-summary"), def, nil, "vs-mixed-summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != RunPassed {
+		t.Fatalf("mixed assertions and matchers must pass: %s (%s)", res.Status, res.Summary)
+	}
+	if res.Summary != "1 assertion(s) passed; 3 matcher(s) matched in order; 0 not evaluated" {
+		t.Fatalf("summary must separate assertions from matchers: %s", res.Summary)
+	}
+}
+
 func TestVerifySequenceEnforcesOrder(t *testing.T) {
 	def := parseDef(t, `{
 	  "steps": [
