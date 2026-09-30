@@ -147,3 +147,11 @@ func TestScenarioListRejectsUnknownFormat(t *testing.T) {
 		t.Fatal("an unknown --format must be an error")
 	}
 }
+
+func TestScenarioListBadFormatIsReportedBeforeMissingConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_, err := runCLI(t, newScenarioCmd(), "list", "x", "--format", "yaml")
+	if err == nil || !strings.Contains(err.Error(), "unknown --format") {
+		t.Fatalf("a bad --format must be reported before config loading, got: %v", err)
+	}
+}
