@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -99,5 +101,49 @@ func TestScenarioListCLIFlag(t *testing.T) {
 
 	if outVerbose != outShortVerbose {
 		t.Fatalf("--verbose and -v output must match exactly.\n--verbose:\n%s\n-v:\n%s", outVerbose, outShortVerbose)
+	}
+}
+
+func TestScenarioListFormatJSONMatchesMCP(t *testing.T) {
+	cfg := setupTestSandbox(t)
+
+	out, err := runCLI(t, newScenarioCmd(), "list", "widgets", "--format", "json")
+	if err != nil {
+		t.Fatalf("scenario list --format json: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+
+	res, _ := callTool(t, cfg, "scenario_list", map[string]any{"sandbox": "widgets"})
+	want, _ := res["data"].(map[string]any)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("CLI JSON and MCP payload differ.\ncli: %v\nmcp: %v", got, want)
+	}
+
+	arch, _ := got["archetypes"].([]any)
+	if len(arch) == 0 {
+		t.Fatal("archetypes missing")
+	}
+	sawReason := false
+	for _, a := range arch {
+		m := a.(map[string]any)
+		if _, ok := m["applicable"]; !ok {
+			t.Fatalf("archetype without applicable: %v", m)
+		}
+		if m["applicable"] == false && m["reason"] != "" {
+			sawReason = true
+		}
+	}
+	if !sawReason {
+		t.Fatal("a non-binding archetype must carry its reason")
+	}
+}
+
+func TestScenarioListRejectsUnknownFormat(t *testing.T) {
+	setupTestSandbox(t)
+	if _, err := runCLI(t, newScenarioCmd(), "list", "widgets", "--format", "yaml"); err == nil {
+		t.Fatal("an unknown --format must be an error")
 	}
 }

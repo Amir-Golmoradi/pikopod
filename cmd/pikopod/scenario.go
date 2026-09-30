@@ -125,6 +125,25 @@ func scenarioList(cfg *config.Config, sandboxName string, verbose bool, out io.W
 	return nil
 }
 
+func scenarioListData(cfg *config.Config, def *ir.ApiDefinition, bindings []resolve.Binding) map[string]any {
+	packs, _ := scenario.ListPacks(packDirs(cfg)...)
+	packList := []map[string]any{}
+	for _, p := range packs {
+		packList = append(packList, map[string]any{"name": p.Name, "description": p.Description, "path": p.Path})
+	}
+	return map[string]any{"archetypes": bindings, "packs": packList, "endpoints": len(def.Endpoints)}
+}
+
+func scenarioListJSON(cfg *config.Config, sandboxName string, out io.Writer) error {
+	_, def, err := loadSandboxDef(cfg, sandboxName)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(scenarioListData(cfg, def, resolve.ListBindings(def)))
+}
+
 func resolveRunnable(cfg *config.Config, name string, def *ir.ApiDefinition, bindOverrides map[string]string) (*scenario.ScenarioDefinition, *resolve.Info, error) {
 	return resolve.ResolveDetailed(def, name, resolve.Options{PackDirs: packDirs(cfg), BindOverrides: bindOverrides})
 }

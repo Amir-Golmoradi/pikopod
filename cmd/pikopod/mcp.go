@@ -406,11 +406,6 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 				return nil, err
 			}
 			bindings := resolve.ListBindings(def)
-			packs, _ := scenario.ListPacks(packDirs(cfg)...)
-			packList := []map[string]any{}
-			for _, p := range packs {
-				packList = append(packList, map[string]any{"name": p.Name, "description": p.Description, "path": p.Path})
-			}
 			applicable := 0
 			var reasons []string
 			for _, b := range bindings {
@@ -420,7 +415,7 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 					reasons = append(reasons, b.ID+": "+b.Reason)
 				}
 			}
-			data := map[string]any{"archetypes": bindings, "packs": packList, "endpoints": len(def.Endpoints)}
+			data := scenarioListData(cfg, def, bindings)
 			if applicable == 0 {
 				return toolResult{Verdict: VerdictUnverifiable, Data: data, Reason: "no archetype binds to this API: " + strings.Join(reasons, "; ")}, nil
 			}
