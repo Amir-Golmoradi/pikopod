@@ -50,6 +50,9 @@ func TestModeVerifyProvesWhatTheClientSent(t *testing.T) {
 	if result["status"] != "PASSED" {
 		t.Fatalf("three retries under one key must verify as PASSED, got %v", body)
 	}
+	if result["summary"] != "3 matcher(s) matched in order" {
+		t.Fatalf("verify summary must count matchers, got %v", result["summary"])
+	}
 	steps, _ := result["steps"].([]any)
 	if len(steps) == 0 {
 		t.Fatalf("verify must report the verification steps it ran: %v", body)

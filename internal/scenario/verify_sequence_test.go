@@ -31,6 +31,32 @@ func TestVerifySequenceProvesIdempotencyKeyReuse(t *testing.T) {
 	}
 }
 
+func TestVerifySequenceSummaryCountsMatchers(t *testing.T) {
+	def := parseDef(t, `{
+	  "steps": [
+	    {"key": "a1", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "a2", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "a3", "type": "REQUEST", "config": {"method": "POST", "path": "/widgets"}},
+	    {"key": "seq", "type": "VERIFY_SEQUENCE",
+	     "config": {"requests": [
+	       {"method": "POST", "path": "/widgets"},
+	       {"method": "POST", "path": "/widgets"},
+	       {"method": "POST", "path": "/widgets"}
+	     ]}}
+	  ]
+	}`)
+	res, err := Run(runnerEngine(t, "vs-summary"), def, nil, "vs-summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != RunPassed {
+		t.Fatalf("three ordered POSTs must match: %s (%s)", res.Status, res.Summary)
+	}
+	if res.Summary != "3 matcher(s) matched in order" {
+		t.Fatalf("VERIFY_SEQUENCE summary must count matchers: %s", res.Summary)
+	}
+}
+
 func TestVerifySequenceEnforcesOrder(t *testing.T) {
 	def := parseDef(t, `{
 	  "steps": [

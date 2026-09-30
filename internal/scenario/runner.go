@@ -162,7 +162,7 @@ func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed 
 
 	res := &RunResult{Steps: make([]StepResult, 0, len(def.Steps))}
 	stepHashes := make([]string, 0, len(def.Steps))
-	notEvaluated, evaluated := 0, 0
+	notEvaluated, evaluated, assertionsEvaluated, matchersMatched := 0, 0, 0, 0
 	hardFailedAt := -1
 	hardStatus := ""
 	failureSummary := ""
@@ -173,8 +173,12 @@ func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed 
 		notEvaluated += out.notEvaluated
 		if n := len(step.Assertions) - out.notEvaluated; n > 0 {
 			evaluated += n
+			assertionsEvaluated += n
 		}
 		evaluated += out.intrinsicChecks
+		if step.Type == "VERIFY_SEQUENCE" {
+			matchersMatched += out.intrinsicChecks
+		}
 		for k, v := range out.captures {
 			r.captures[k] = v
 		}
@@ -212,6 +216,9 @@ func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed 
 	case hardFailedAt >= 0:
 		res.Status = RunFailed
 		res.Summary = failureSummary
+	case matchersMatched > 0 && assertionsEvaluated == 0:
+		res.Status = RunPassed
+		res.Summary = fmt.Sprintf("%d matcher(s) matched in order", matchersMatched)
 	case evaluated > 0:
 		res.Status = RunPassed
 		res.Summary = fmt.Sprintf("%d assertion(s) passed; %d not evaluated", evaluated, notEvaluated)
