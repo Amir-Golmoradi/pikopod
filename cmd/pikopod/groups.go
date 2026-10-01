@@ -53,6 +53,7 @@ func agentSubcommands() []*cobra.Command {
 		movedFrom(newSpecUpdateCmd(), "pikopod spec-update"),
 		movedFrom(newVolatileCmd(), "pikopod volatile"),
 		movedFrom(newReplayCmd(), "pikopod replay"),
+		newTruthfulnessCmd(),
 	}
 }
 

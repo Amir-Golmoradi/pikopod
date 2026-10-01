@@ -6,13 +6,37 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/pikopod/pikopod/internal/agent"
 	"github.com/pikopod/pikopod/internal/alert"
 	"github.com/pikopod/pikopod/internal/config"
+	"github.com/pikopod/pikopod/internal/importer"
+	"github.com/pikopod/pikopod/internal/truth"
 )
+
+const fakepaySpec = `{
+  "openapi": "3.1.0",
+  "info": {"title": "fakepay", "version": "1.0.0"},
+  "paths": {
+    "/transaction": {
+      "post": {
+        "operationId": "createTransaction",
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Transaction"}}}},
+        "responses": {"200": {"description": "created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Transaction"}}}}}
+      }
+    }
+  },
+  "components": {"schemas": {"Transaction": {"type": "object", "properties": {
+    "id": {"type": "string", "readOnly": true},
+    "status": {"type": "string", "enum": ["success", "pending", "failed"], "readOnly": true},
+    "amount": {"type": "integer"},
+    "currency": {"type": "string"},
+    "customer_email": {"type": "string"}
+  }}}}
+}`
 
 const warmupSamples = 30
 
@@ -62,7 +86,8 @@ func Run(out io.Writer) error {
 
 	hit := func(n int) {
 		for i := 0; i < n; i++ {
-			resp, err := http.Get(fmt.Sprintf("%s/fakepay/transaction/tx_%012d", front.URL, i))
+			resp, err := http.Post(front.URL+"/fakepay/transaction", "application/json",
+				strings.NewReader(`{"amount":245000,"currency":"NGN","customer_email":"demo.user@example-shop.com"}`))
 			if err == nil {
 				io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
@@ -71,7 +96,7 @@ func Run(out io.Writer) error {
 	}
 	hit(warmupSamples + 10)
 	waitFor(func() bool { return a.Metrics.RecordingsWritten.Load() >= int64(warmupSamples+10) }, 10*time.Second)
-	say("   baselines learned and frozen: GET /transaction/tx_{id} (2xx) — %d samples, redacted at write.", warmupSamples+10)
+	say("   baselines learned and frozen: POST /transaction (2xx) — %d samples, redacted at write.", warmupSamples+10)
 	say("")
 	say("③ The provider now silently ships a change (renames an enum, adds a field) —")
 	say("   exactly the kind of change that costs real money to find in production:")
@@ -99,6 +124,24 @@ func Run(out io.Writer) error {
 	say("Then, when you are ready to watch real traffic:")
 	say("  pikopod up                          # staging first, then production")
 	say("  pikopod agent incidents                   # what failed; reproduce any of it")
+	say("")
+	def, err := importer.NormalizeOpenAPI([]byte(fakepaySpec))
+	if err != nil {
+		return err
+	}
+	records, err := truth.LoadRecordings(dir, "fakepay")
+	if err != nil {
+		return err
+	}
+	report, err := truth.Score(def, records, truth.Options{Seed: "demo"})
+	if err != nil {
+		return err
+	}
+	say("⑥ The sandbox built from the provider's spec, scored against what the provider really sent:")
+	for _, w := range report.Worst {
+		say("   %s wrong %d× (sandbox source: %s)", w.Path, w.Count, w.Source)
+	}
+	say("truthfulness: %.0f%% over %d recorded responses on %d endpoint(s) (%d leaves shape-only)", report.Percent, report.Responses, report.Endpoints, report.ShapeOnly)
 	return nil
 }
 

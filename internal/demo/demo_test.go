@@ -68,3 +68,18 @@ func TestDemoTeachesTheLoopNotJustDetection(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoEndsWithTheTruthfulnessNumber(t *testing.T) {
+	var out bytes.Buffer
+	if err := Run(&out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "\ntruthfulness: ") {
+		t.Fatalf("the demo must end by printing the sandbox's truthfulness:\n%s", got)
+	}
+	tail := got[strings.LastIndex(got, "\ntruthfulness: "):]
+	if !strings.Contains(tail, "% over") || !strings.Contains(tail, "recorded responses") {
+		t.Fatalf("the truthfulness line names the number and the sample: %q", tail)
+	}
+}
