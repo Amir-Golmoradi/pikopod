@@ -561,6 +561,15 @@ func newStatusCmd() *cobra.Command {
 				return errfmt.Newf("agent answered strangely", "retry; if it persists the port is taken by something else", "docs/config-reference.md", "%v", err)
 			}
 			enc, _ := json.MarshalIndent(health, "", "  ")
+			if summary := truthfulnessSummary(cfg); len(summary) > 0 {
+				var payload map[string]any
+				if json.Unmarshal(enc, &payload) == nil {
+					payload["truthfulness"] = summary
+					if again, err := json.MarshalIndent(payload, "", "  "); err == nil {
+						enc = again
+					}
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", enc)
 			return nil
 		}}
