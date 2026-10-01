@@ -637,7 +637,7 @@ func (s *sandboxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	admin := len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks")
+	admin := len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks" || parts[3] == "rules")
 	emit := len(parts) == 5 && parts[3] == "webhooks" && parts[4] == "emit"
 	verify := len(parts) == 5 && parts[3] == "mode" && parts[4] == "verify"
 	if len(parts) < 4 || parts[1] != "sandboxes" || (!admin && !emit && !verify) {
@@ -665,6 +665,10 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	if parts[3] == "mode" {
 		s.serveMode(w, r, parts[2], engine)
+		return
+	}
+	if parts[3] == "rules" {
+		s.serveRules(w, r, engine)
 		return
 	}
 	if parts[3] == "webhooks" {
@@ -867,4 +871,24 @@ func newSandboxRequestsCmd() *cobra.Command {
 	c.Flags().Int("last", 50, "number of most recent requests to show")
 	c.Flags().Bool("reset", false, "clear the journal (and its eviction taint)")
 	return c
+}
+
+func (s *sandboxServer) serveRules(w http.ResponseWriter, r *http.Request, engine *sandbox.Engine) {
+	switch r.Method {
+	case http.MethodGet:
+		json.NewEncoder(w).Encode(map[string]any{"rules": engine.RuleSet()})
+	case http.MethodPut:
+		var rs sandbox.RuleSet
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&rs); err != nil {
+			writeSandboxJSONError(w, http.StatusBadRequest, "body must be a rule set: {\"version\": n, \"rules\": [...]}")
+			return
+		}
+		if err := engine.SetRules(&rs); err != nil {
+			writeSandboxJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"rules": engine.RuleSet()})
+	default:
+		writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+	}
 }

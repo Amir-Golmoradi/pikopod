@@ -35,6 +35,7 @@ func newRootCmd() *cobra.Command {
 		inGroup("sandbox", newUpCmd()),
 		inGroup("sandbox", newModeCmd()),
 		inGroup("sandbox", newChaosCmd()),
+		inGroup("sandbox", newRuleCmd()),
 		inGroup("sandbox", newWebhookCmd()),
 		inGroup("sandbox", newRequestsCmd()),
 		inGroup("sandbox", newReproduceCmd()),

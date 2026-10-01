@@ -397,8 +397,9 @@ serve), optional `set_state: {resource, state}` and optional `emit: <declared
 event>`. `provenance` is `manual`, `promoted:<fp>` or `imported:<fp>`.
 
 A rule that names a route, an event or an example the spec does not declare
-is refused when the sandbox loads, and the error names the rule. The full
-matcher table is on the docs site under Sandbox, Rules.
+is refused when the sandbox loads, and the error names the rule. `pikopod rule
+list|add|drop|check <sandbox>` manage the file and apply changes to a running
+sandbox at once. The full matcher table is on the docs site under Sandbox, Rules.
 
 ## quotas
 

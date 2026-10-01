@@ -37,7 +37,7 @@ func TestRootHelpHasTheSixSections(t *testing.T) {
 		title string
 		names []string
 	}{
-		{"Sandbox", []string{"import", "up", "mode", "chaos", "webhook", "requests", "reproduce"}},
+		{"Sandbox", []string{"import", "up", "mode", "chaos", "rule", "webhook", "requests", "reproduce"}},
 		{"Scenarios", []string{"scenario"}},
 		{"CI", []string{"spec-diff"}},
 		{"Observe", []string{"agent"}},
