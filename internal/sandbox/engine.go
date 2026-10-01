@@ -60,6 +60,7 @@ type Engine struct {
 	faults          []FaultRule
 	rulesMu         sync.Mutex
 	rules           []compiledRule
+	rulesVersion    int
 	wallclockFaults bool
 	effective       *contract.Effective
 	journal         journal
@@ -159,6 +160,9 @@ func NewEngine(def *ir.ApiDefinition, cfg Config, store *Store) (*Engine, error)
 		return nil, err
 	}
 	e.rules = rules
+	if cfg.Rules != nil {
+		e.rulesVersion = cfg.Rules.Version
+	}
 	e.journalTok = sanitize.NewTokenizer(cfg.Seed, "sandbox-journal", 1)
 	if cfg.WebhookURL != "" {
 		e.webhookURL = cfg.WebhookURL
