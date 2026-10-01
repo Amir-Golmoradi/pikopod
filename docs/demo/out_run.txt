@@ -3,7 +3,7 @@
     PASSED         declined         POST /charges → 400
     NOT_EVALUATED  clear            cleared matching faults
     PASSED         recovered        POST /charges → 201
-✓ retry_storm — PASSED (7 assertion(s) passed; 0 not evaluated)
+✓ retry_storm — PASSED (4 assertion(s) passed; 3 matcher(s) matched in order; 0 not evaluated)
     NOT_EVALUATED  arm              armed error on POST /charges
     PASSED         attempt1         POST /charges → 503
     PASSED         attempt2         POST /charges → 503

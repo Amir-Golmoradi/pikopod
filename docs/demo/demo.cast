@@ -1,4 +1,4 @@
-{"version": 2, "width": 120, "height": 42, "timestamp": 1790620640, "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}, "title": "pikopod - rehearse the failures, reproduce the ones you missed"}
+{"version": 2, "width": 120, "height": 42, "timestamp": 1790890998, "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}, "title": "pikopod - rehearse the failures, reproduce the ones you missed"}
 [0.6, "o", "\u001b[38;5;114m$\u001b[0m "]
 [0.6, "o", "p"]
 [0.628, "o", "i"]
@@ -56,11 +56,11 @@
 [2.084, "o", "o"]
 [2.112, "o", "n"]
 [2.49, "o", "\r\n"]
-[2.49, "o", "sandbox examplepay registered (sbx_b578c3e83fd3ff43, 4 endpoints)\r\n"]
+[2.49, "o", "sandbox examplepay registered (sbx_ad0d3a1998d501fc, 4 endpoints)\r\n"]
 [2.525, "o", "responses: 0 field(s) synthesised without spec, example or convention\r\n"]
 [2.56, "o", "serve it with `pikopod up` \u2192 http://127.0.0.1:4600/examplepay/...\r\n"]
 [2.595, "o", "test credential (send it the way the spec's auth scheme expects, e.g. the Authorization header):\r\n"]
-[2.63, "o", "  pikopod_sbx_test_cbf2a98681ed32c232d8410926b683ecdfe4f9e43539bf2c\r\n"]
+[2.63, "o", "  pikopod_sbx_test_0c624ab2a36088a5483fb1f9d9cca7045df6687bb53a2b5f\r\n"]
 [4.265, "o", "\u001b[38;5;114m$\u001b[0m "]
 [4.265, "o", "p"]
 [4.293, "o", "i"]
@@ -171,7 +171,7 @@
 [10.398, "o", "    PASSED         declined         POST /charges \u2192 400\r\n"]
 [10.448, "o", "    NOT_EVALUATED  clear            cleared matching faults\r\n"]
 [10.498, "o", "    PASSED         recovered        POST /charges \u2192 201\r\n"]
-[10.548, "o", "\u2713 retry_storm \u2014 PASSED (7 assertion(s) passed; 0 not evaluated)\r\n"]
+[10.548, "o", "\u2713 retry_storm \u2014 PASSED (4 assertion(s) passed; 3 matcher(s) matched in order; 0 not evaluated)\r\n"]
 [10.598, "o", "    NOT_EVALUATED  arm              armed error on POST /charges\r\n"]
 [10.648, "o", "    PASSED         attempt1         POST /charges \u2192 503\r\n"]
 [10.698, "o", "    PASSED         attempt2         POST /charges \u2192 503\r\n"]
