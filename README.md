@@ -155,7 +155,7 @@ pikopod mode verify examplepay
 ```
 
 ```
-✓ retry_storm — PASSED (3 assertion(s) passed; 0 not evaluated)
+✓ retry_storm — PASSED (3 matcher(s) matched in order)
     PASSED         storm-shape      3 matcher(s) matched in order
 ```
 
