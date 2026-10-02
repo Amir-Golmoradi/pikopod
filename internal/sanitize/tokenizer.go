@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 type TokenFormat string
@@ -104,14 +105,23 @@ func (t *Tokenizer) render(format TokenFormat, value string, seed []byte) string
 		return fmt.Sprintf("%s-%s-4%s-a%s-%s", s[0:8], s[8:12], s[13:16], s[17:20], s[20:32])
 	case FormatPrefixedID:
 		m := prefixedRE.FindStringSubmatch(value)
-		return m[1] + pick(seed, 0, alnumAlphabet, len(m[2]))
+		return m[1] + keepDigit(pick(seed, 0, alnumAlphabet, len(m[2])), m[2], seed)
 	case FormatDigits:
 		return pick(seed, 0, digitAlphabet, len(value))
 	case FormatAlnum:
-		return pick(seed, 0, alnumAlphabet, len(value))
+		return keepDigit(pick(seed, 0, alnumAlphabet, len(value)), value, seed)
 	default:
 		return "tok_" + pick(seed, 0, alnumAlphabet, 16)
 	}
+}
+
+func keepDigit(token, original string, seed []byte) string {
+	if !strings.ContainsAny(original, digitAlphabet) || strings.ContainsAny(token, digitAlphabet) || token == "" {
+		return token
+	}
+	out := []byte(token)
+	out[len(out)-1] = pick(seed, len(token), digitAlphabet, 1)[0]
+	return string(out)
 }
 
 func pick(seed []byte, offset int, alphabet string, length int) string {
