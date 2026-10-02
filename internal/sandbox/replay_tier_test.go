@@ -43,7 +43,7 @@ func TestRecordingsTierServesUnroutablePaths(t *testing.T) {
 		{Method: "GET", Path: "/widgets/tok_1", Status: 200, RespKind: "json",
 			RespBody: map[string]any{"from": "recording"}},
 	})
-	e := newEngine(t, loadWidgets(t), Config{ID: "sbx_rt", Seed: "rt-1", Recordings: set})
+	e := newEngine(t, loadWidgets(t), Config{ID: "sbx_rt", Seed: "rt-1", Recordings: set, RecordingsMode: "fallback"})
 
 	got := do(t, e, "GET", "/balance", "", nil)
 	if got.status != 200 {
@@ -60,7 +60,7 @@ func TestRecordingsTierServesUnroutablePaths(t *testing.T) {
 
 	specSide := do(t, e, "GET", "/widgets/tok_1", "", nil)
 	if specSide.headers[ReplayTierHeader] != "" {
-		t.Fatal("recordings must never shadow spec routes")
+		t.Fatal("in fallback mode recordings never shadow spec routes")
 	}
 	if specSide.status == 200 {
 		t.Fatalf("missing resource must stay a spec-side miss, got %d %s", specSide.status, specSide.body)

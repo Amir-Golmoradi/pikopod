@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pikopod/pikopod/internal/ir"
+	"github.com/pikopod/pikopod/internal/proxy"
 )
 
 type QuotaLimits struct {
@@ -39,6 +40,7 @@ type storeCtx struct {
 	req        *ingressRequest
 	innerPath  string
 	isResource bool
+	template   *proxy.Record
 }
 
 func etagFor(version int64) string { return `"` + strconv.FormatInt(version, 10) + `"` }
@@ -203,7 +205,24 @@ func (e *Engine) doCreate(ctx *storeCtx) (*RawResponse, error) {
 
 	synth := e.synthCtx("create", resourceKey).forResponse(ctx.endpoint, status)
 	stored := completeResource(shape.inner, attrs, synth, !ctx.isResource)
-	if ctx.isResource || idDeclared {
+	var recordedInner, recordedOuter *JSONObject
+	if ctx.template != nil {
+		recordedInner, recordedOuter = recordedTemplate(ctx.template, shape.slot)
+		if ctx.template.Status >= 200 && ctx.template.Status < 300 {
+			status = ctx.template.Status
+		}
+	}
+	if recordedInner != nil {
+		for _, k := range recordedInner.Keys() {
+			if k == "id" || attrs.Has(k) {
+				continue
+			}
+			v, _ := recordedInner.Get(k)
+			stored.Set(k, v)
+			e.tracef("synth", "%s ← %s", k, sourceRecorded)
+		}
+	}
+	if ctx.isResource || idDeclared || (recordedInner != nil && recordedInner.Has("id")) {
 		stored.Set("id", idValue)
 		e.tracef("synth", "id ← store key %v", idValue)
 	}
@@ -227,7 +246,25 @@ func (e *Engine) doCreate(ctx *storeCtx) (*RawResponse, error) {
 
 	e.enqueueWebhookFor(ctx.endpoint, webhookActionCreated, typeSlug(ctx.op.typ), json.RawMessage(created.Attributes))
 
-	response := jsonResponse(status, shape.wrap(json.RawMessage(created.Attributes), synth), map[string]string{"etag": etagFor(created.Version)})
+	headers := map[string]string{"etag": etagFor(created.Version)}
+	var payload any
+	switch {
+	case recordedOuter != nil:
+		wrapped := recordedOuter.Clone()
+		wrapped.Set(shape.slot, json.RawMessage(created.Attributes))
+		for _, k := range recordedOuter.Keys() {
+			if k != shape.slot {
+				e.tracef("synth", "%s ← %s", k, sourceRecorded)
+			}
+		}
+		payload = wrapped
+	default:
+		payload = shape.wrap(json.RawMessage(created.Attributes), synth)
+	}
+	if recordedInner != nil {
+		headers[SourceHeader] = sourceRecorded
+	}
+	response := jsonResponse(status, payload, headers)
 	if key != nil {
 		e.recordIdempotencyLocked(*key, reqHash, response)
 	}

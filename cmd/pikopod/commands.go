@@ -105,7 +105,8 @@ func newImportCmd() *cobra.Command {
 			}
 			spec, _ := cmd.Flags().GetString("spec")
 			if update, _ := cmd.Flags().GetBool("update"); update {
-				return sandboxUpdate(cfg, args[0], spec, cmd.OutOrStdout())
+				recordings, _ := cmd.Flags().GetString("recordings")
+				return sandboxUpdateOpts(cfg, args[0], spec, recordings, cmd.OutOrStdout())
 			}
 			if spec == "" {
 				return errfmt.New("no spec given", "import needs the provider's OpenAPI document", "pass --spec <file-or-url>", "")
@@ -326,7 +327,7 @@ func newReplayCmd() *cobra.Command {
 		RunE: runReplay}
 	c.Flags().Bool("ci", false, "CI gate: diff recordings offline against frozen baselines")
 	c.Flags().String("handoff", "", "also write the JSON findings here (for `pikopod pr comment`)")
-	c.Flags().String("serve", "", "RETIRED: use `sandbox add --recordings-fallback` — recordings now serve through the sandbox")
+	c.Flags().String("serve", "", "RETIRED: use `import --recordings first|fallback` — recordings now serve through the sandbox")
 	return c
 }
 

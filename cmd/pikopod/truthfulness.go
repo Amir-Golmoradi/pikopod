@@ -95,7 +95,7 @@ func truthfulnessFor(cfg *config.Config, upstream string, limit int) (*truth.Rep
 	if up, ok := cfg.Upstreams[upstream]; ok {
 		volatileFields = up.VolatileFields
 	}
-	return truth.Score(def, jsonRecords, truth.Options{Seed: entry.Seed, Volatile: volatileFields, Limit: limit})
+	return truth.Score(def, jsonRecords, truth.Options{Seed: entry.Seed, Volatile: volatileFields, Limit: limit, Recordings: recordingsFor(cfg, entry), RecordingsMode: entry.Recordings})
 }
 
 func truthfulnessSummary(cfg *config.Config) map[string]any {

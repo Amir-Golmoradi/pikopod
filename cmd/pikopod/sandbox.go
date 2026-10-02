@@ -29,6 +29,7 @@ import (
 	"github.com/pikopod/pikopod/internal/specdiff"
 	"github.com/pikopod/pikopod/internal/specwatch"
 	"github.com/pikopod/pikopod/internal/store"
+	"github.com/pikopod/pikopod/internal/truth"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +51,8 @@ type sandboxEntry struct {
 
 	WebhookURL string `json:"webhookUrl,omitempty"`
 
+	Recordings string `json:"recordings,omitempty"`
+
 	RecordingsFallback bool `json:"recordingsFallback,omitempty"`
 }
 
@@ -66,6 +69,16 @@ func loadRegistry(dataDir string) ([]sandboxEntry, error) {
 	var entries []sandboxEntry
 	if err := json.Unmarshal(raw, &entries); err != nil {
 		return nil, errfmt.Newf("sandbox registry is corrupt", "fix or remove "+registryPath(dataDir)+" and re-add sandboxes", "docs/config-reference.md#data_dir", "%v", err)
+	}
+	for i := range entries {
+		if entries[i].Recordings == "" {
+			if entries[i].RecordingsFallback {
+				entries[i].Recordings = "fallback"
+			} else {
+				entries[i].Recordings = "off"
+			}
+		}
+		entries[i].RecordingsFallback = false
 	}
 	return entries, nil
 }
@@ -166,13 +179,26 @@ func emitSpec(path string, raw []byte, origin string, out io.Writer) error {
 }
 
 type addOptions struct {
-	SpecSource         string
-	Seed               string
-	WebhookURL         string
-	UpstreamLink       string
-	RecordingsFallback bool
-	EmitSpec           string
-	Webhooks           string
+	SpecSource   string
+	Seed         string
+	WebhookURL   string
+	UpstreamLink string
+	Recordings   string
+	EmitSpec     string
+	Webhooks     string
+}
+
+func recordingsModeFor(dataDir, upstream, requested string) (string, error) {
+	switch requested {
+	case "first", "fallback", "off":
+		return requested, nil
+	case "":
+		if _, err := os.Stat(filepath.Join(dataDir, "recordings", upstream+".ndjson")); err == nil {
+			return "first", nil
+		}
+		return "off", nil
+	}
+	return "", errfmt.New("unknown --recordings mode", fmt.Sprintf("%q is not a mode", requested), "use first, fallback or off", "docs/config-reference.md#data_dir")
 }
 
 func loadSpecOnce(source string) ([]byte, error) {
@@ -209,11 +235,15 @@ func loadSpecOnce(source string) ([]byte, error) {
 }
 
 func sandboxAdd(cfg *config.Config, name, specSource, seed, webhookURL, upstreamLink string, recordingsFallback bool, out io.Writer) error {
-	return sandboxAddOpts(cfg, name, addOptions{SpecSource: specSource, Seed: seed, WebhookURL: webhookURL, UpstreamLink: upstreamLink, RecordingsFallback: recordingsFallback}, out)
+	recordings := ""
+	if recordingsFallback {
+		recordings = "fallback"
+	}
+	return sandboxAddOpts(cfg, name, addOptions{SpecSource: specSource, Seed: seed, WebhookURL: webhookURL, UpstreamLink: upstreamLink, Recordings: recordings}, out)
 }
 
 func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer) error {
-	specSource, seed, webhookURL, upstreamLink, recordingsFallback := o.SpecSource, o.Seed, o.WebhookURL, o.UpstreamLink, o.RecordingsFallback
+	specSource, seed, webhookURL, upstreamLink := o.SpecSource, o.Seed, o.WebhookURL, o.UpstreamLink
 	if strings.ContainsAny(name, "/\\ \t") || name == "" {
 		return errfmt.New("invalid sandbox name", fmt.Sprintf("%q cannot contain slashes or whitespace", name), "pick a short slug like `payments` — it becomes the route /<name>/ on the sandbox server", "")
 	}
@@ -264,18 +294,26 @@ func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer
 			upstreamLink = name
 		}
 	}
+	recordingsUpstream := upstreamLink
+	if recordingsUpstream == "" {
+		recordingsUpstream = name
+	}
+	recordings, err := recordingsModeFor(cfg.DataDir, recordingsUpstream, o.Recordings)
+	if err != nil {
+		return err
+	}
 	entry := sandboxEntry{
-		ID:                 newSandboxID(),
-		Name:               name,
-		Origin:             origin,
-		Upstream:           upstreamLink,
-		Seed:               seed,
-		Mode:               "deterministic",
-		CreatedClockMs:     sandbox.SandboxBaseEpochMs,
-		IRFile:             irRel,
-		SpecSource:         specSource,
-		WebhookURL:         webhookURL,
-		RecordingsFallback: recordingsFallback,
+		ID:             newSandboxID(),
+		Name:           name,
+		Origin:         origin,
+		Upstream:       upstreamLink,
+		Seed:           seed,
+		Mode:           "deterministic",
+		CreatedClockMs: sandbox.SandboxBaseEpochMs,
+		IRFile:         irRel,
+		SpecSource:     specSource,
+		WebhookURL:     webhookURL,
+		Recordings:     recordings,
 	}
 	entries = append(entries, entry)
 	if err := saveRegistry(cfg.DataDir, entries); err != nil {
@@ -283,6 +321,7 @@ func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer
 	}
 	fmt.Fprintf(out, "sandbox %s registered (%s, %d endpoints)\n", name, entry.ID, len(def.Endpoints))
 	fmt.Fprintf(out, "responses: %s\n", sandbox.RealismLine(def))
+	printRecordingsMode(out, cfg.DataDir, recordingsUpstream, recordings)
 	if len(def.Webhooks) > 0 {
 		if webhookURL != "" {
 			fmt.Fprintf(out, "webhooks: %d declared event(s); deliveries POST to %s (signed; secret below)\n  webhook secret: %s\n", len(def.Webhooks), webhookURL, sandbox.IssuedWebhookSecret(entry.Seed))
@@ -305,6 +344,10 @@ func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer
 }
 
 func sandboxUpdate(cfg *config.Config, name, specSource string, out io.Writer) error {
+	return sandboxUpdateOpts(cfg, name, specSource, "", out)
+}
+
+func sandboxUpdateOpts(cfg *config.Config, name, specSource, recordings string, out io.Writer) error {
 	entries, err := loadRegistry(cfg.DataDir)
 	if err != nil {
 		return err
@@ -355,19 +398,35 @@ func sandboxUpdate(cfg *config.Config, name, specSource string, out io.Writer) e
 	}
 	entry.SpecSource = specSource
 	entry.Origin = origin
-	if err := saveRegistry(cfg.DataDir, entries); err != nil {
-		return err
-	}
-
 	watchName := entry.Upstream
 	if watchName == "" {
 		watchName = name
 	}
+	mode, err := recordingsModeFor(cfg.DataDir, watchName, recordings)
+	if err != nil {
+		return err
+	}
+	entry.Recordings = mode
+	if err := saveRegistry(cfg.DataDir, entries); err != nil {
+		return err
+	}
+
 	if err := specwatch.ResetPin(cfg.DataDir, watchName); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "pin refreshed for %s (%d endpoints) — restart `pikopod up` to serve the updated contract\n", name, len(def.Endpoints))
+	printRecordingsMode(out, cfg.DataDir, watchName, mode)
 	return nil
+}
+
+func printRecordingsMode(out io.Writer, dataDir, upstream, mode string) {
+	switch mode {
+	case "first":
+		recorded, _ := truth.LoadRecordings(dataDir, upstream)
+		fmt.Fprintf(out, "recordings: first (%d recorded responses for %s answer before the spec)\n", len(recorded), upstream)
+	case "fallback":
+		fmt.Fprintf(out, "recordings: fallback (recorded responses answer only paths the spec does not declare)\n")
+	}
 }
 
 func sandboxList(cfg *config.Config, out io.Writer) error {
@@ -386,7 +445,7 @@ func sandboxList(cfg *config.Config, out io.Writer) error {
 		} else if e.Origin != "" && e.Origin != "spec" {
 			marking = "  origin=" + e.Origin
 		}
-		fmt.Fprintf(out, "%-20s %s  mode=%s seed=%s  route=/%s/  ir=%s%s\n  credential: %s\n", e.Name, e.ID, e.Mode, e.Seed, e.Name, e.IRFile, marking, sandbox.IssuedCredential(e.Seed))
+		fmt.Fprintf(out, "%-20s %s  mode=%s seed=%s  recordings=%s  route=/%s/  ir=%s%s\n  credential: %s\n", e.Name, e.ID, e.Mode, e.Seed, e.Recordings, e.Name, e.IRFile, marking, sandbox.IssuedCredential(e.Seed))
 		if defErr == nil {
 			fmt.Fprintf(out, "  responses: %s\n", sandbox.RealismLine(def))
 		}
@@ -465,7 +524,7 @@ func rulesFor(cfg *config.Config, entry *sandboxEntry) (*sandbox.RuleSet, error)
 }
 
 func recordingsFor(cfg *config.Config, entry *sandboxEntry) *replay.Set {
-	if !entry.RecordingsFallback {
+	if entry.Recordings == "" || entry.Recordings == "off" {
 		return nil
 	}
 	upstream := entry.Upstream
@@ -474,7 +533,7 @@ func recordingsFor(cfg *config.Config, entry *sandboxEntry) *replay.Set {
 	}
 	set, err := replay.Load(cfg.DataDir, upstream, cfg.Upstreams[upstream].VolatileFields)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox %s: recordings fallback is ON but no recordings loaded for upstream %q (%v) — unmatched requests will 404 until traffic is recorded\n", entry.Name, upstream, err)
+		fmt.Fprintf(os.Stderr, "sandbox %s: recordings=%s but none loaded for upstream %q (%v) — the spec answers until traffic is recorded\n", entry.Name, entry.Recordings, upstream, err)
 		return nil
 	}
 	return set
@@ -573,6 +632,7 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 		WallclockFaults:   s.wallclockFaults,
 		Effective:         effectiveFor(s.cfg, &entry, 0),
 		Recordings:        recordingsFor(s.cfg, &entry),
+		RecordingsMode:    entry.Recordings,
 		Rules:             rules,
 		WebhookURL:        entry.WebhookURL,
 		WebhookSigningKey: signingKey,
@@ -771,7 +831,7 @@ func addImportFlags(c *cobra.Command) {
 	c.Flags().String("webhooks", "", "YAML/JSON file describing how the provider wraps and signs deliveries, and which calls fire which events")
 	c.Flags().String("emit-spec", "", "write the spec the import used (extracted or fetched) to this path so it can be reviewed, corrected and committed")
 	c.Flags().String("upstream", "", "link to a drift-agent upstream so its traffic refines this contract (auto when names match)")
-	c.Flags().Bool("recordings-fallback", false, "serve the linked upstream's recordings for requests neither the spec nor admitted traffic can answer (final tier; X-Pikopod-Replay-Tier)")
+	c.Flags().String("recordings", "", "first | fallback | off: the linked upstream's recordings answer before the spec, only for paths the spec does not declare, or never (default: first when recordings exist, else off)")
 }
 
 func addOptionsFrom(cmd *cobra.Command, spec string) addOptions {
@@ -779,7 +839,7 @@ func addOptionsFrom(cmd *cobra.Command, spec string) addOptions {
 	o.Seed, _ = cmd.Flags().GetString("seed")
 	o.WebhookURL, _ = cmd.Flags().GetString("webhook-url")
 	o.UpstreamLink, _ = cmd.Flags().GetString("upstream")
-	o.RecordingsFallback, _ = cmd.Flags().GetBool("recordings-fallback")
+	o.Recordings, _ = cmd.Flags().GetString("recordings")
 	o.EmitSpec, _ = cmd.Flags().GetString("emit-spec")
 	o.Webhooks, _ = cmd.Flags().GetString("webhooks")
 	return o

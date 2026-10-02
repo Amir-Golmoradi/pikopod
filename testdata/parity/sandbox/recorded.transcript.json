@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "specFile": "sandbox/widgets.spec.json",
+    "sandboxSeed": "parity-recorded-1",
+    "virtualClockMs": 1735689600000,
+    "credential": "pikopod_sbx_test_e5c3fd0316418e1bc3ec8809f31fffc1eb4332a655a99378",
+    "recordingsFile": "sandbox/widgets.recordings.ndjson",
+    "recordings": "first",
+    "normalizedPaths": [
+      "steps[*].reqHeaders.* == meta.credential -\u003e \"$CREDENTIAL\" (the replayer substitutes the engine credential)"
+    ]
+  },
+  "steps": [
+    {
+      "name": "create-from-recorded-shape",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "gear",
+        "size": 3
+      },
+      "status": 201,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\"",
+        "x-pikopod-source": "recorded"
+      },
+      "respBody": {
+        "name": "gear",
+        "size": 3,
+        "created": "2026-09-30T10:00:00Z",
+        "livemode": false,
+        "object": "widget",
+        "id": "widgets_1"
+      }
+    },
+    {
+      "name": "read-own-resource-from-store",
+      "method": "GET",
+      "path": "/widgets/widgets_1",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\""
+      },
+      "respBody": {
+        "name": "gear",
+        "size": 3,
+        "created": "2026-09-30T10:00:00Z",
+        "livemode": false,
+        "object": "widget",
+        "id": "widgets_1"
+      }
+    },
+    {
+      "name": "read-recorded-id-store-lacks",
+      "method": "GET",
+      "path": "/widgets/wdg_7f3a9c",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "x-pikopod-source": "recorded"
+      },
+      "respBody": {
+        "created": "2026-09-30T10:00:00Z",
+        "id": "wdg_7f3a9c",
+        "livemode": false,
+        "name": "gear",
+        "object": "widget",
+        "size": 3
+      }
+    },
+    {
+      "name": "read-unknown-id-exact-recorded-404",
+      "method": "GET",
+      "path": "/widgets/wdg_000000",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 404,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "x-pikopod-source": "recorded"
+      },
+      "respBody": {
+        "error": {
+          "code": "not_found",
+          "message": "no such widget"
+        }
+      }
+    },
+    {
+      "name": "read-unknown-id-shape-never-serves-404",
+      "method": "GET",
+      "path": "/widgets/wdg_other",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 404,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": {
+        "message": "Not Found"
+      }
+    },
+    {
+      "name": "create-exact-recorded-refusal",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "",
+        "size": 3
+      },
+      "status": 422,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "x-pikopod-source": "recorded"
+      },
+      "respBody": {
+        "error": {
+          "code": "invalid_name",
+          "message": "name must not be empty"
+        }
+      }
+    },
+    {
+      "name": "create-shape-only-never-refused",
+      "method": "POST",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": {
+        "name": "cog",
+        "size": 9
+      },
+      "status": 201,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8",
+        "etag": "\"0\"",
+        "x-pikopod-source": "recorded"
+      },
+      "respBody": {
+        "name": "cog",
+        "size": 9,
+        "created": "2026-09-30T10:00:00Z",
+        "livemode": false,
+        "object": "widget",
+        "id": "widgets_2"
+      }
+    },
+    {
+      "name": "list-stored-first",
+      "method": "GET",
+      "path": "/widgets",
+      "reqHeaders": {},
+      "reqBody": null,
+      "status": 200,
+      "respHeaders": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "respBody": [
+        {
+          "name": "gear",
+          "size": 3,
+          "created": "2026-09-30T10:00:00Z",
+          "livemode": false,
+          "object": "widget",
+          "id": "widgets_1"
+        },
+        {
+          "name": "cog",
+          "size": 9,
+          "created": "2026-09-30T10:00:00Z",
+          "livemode": false,
+          "object": "widget",
+          "id": "widgets_2"
+        }
+      ]
+    }
+  ]
+}

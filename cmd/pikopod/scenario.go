@@ -75,6 +75,7 @@ func scenarioEngine(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefiniti
 		WebhookURL:        entry.WebhookURL,
 		WebhookSigningKey: signingKey,
 		Recordings:        recordingsFor(cfg, entry),
+		RecordingsMode:    entry.Recordings,
 		Rules:             rules,
 	}, st)
 	if err != nil {

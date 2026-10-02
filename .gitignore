@@ -19,6 +19,7 @@ __debug_bin*
 *.db-wal
 *.db-shm
 *.ndjson
+!testdata/parity/sandbox/*.ndjson
 
 # Local config and credentials
 /pikopod.yaml

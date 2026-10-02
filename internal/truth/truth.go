@@ -16,14 +16,17 @@ import (
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/ir"
 	"github.com/pikopod/pikopod/internal/proxy"
+	"github.com/pikopod/pikopod/internal/replay"
 	"github.com/pikopod/pikopod/internal/sandbox"
 	"github.com/pikopod/pikopod/internal/volatile"
 )
 
 type Options struct {
-	Seed     string
-	Volatile []string
-	Limit    int
+	Seed           string
+	Volatile       []string
+	Limit          int
+	Recordings     *replay.Set
+	RecordingsMode string
 }
 
 type Leaf struct {
@@ -231,7 +234,7 @@ func Score(def *ir.ApiDefinition, records []*proxy.Record, opts Options) (*Repor
 		return nil, err
 	}
 	defer store.Close()
-	eng, err := sandbox.NewEngine(def, sandbox.Config{ID: "sbx_truth", Seed: opts.Seed, Mode: "deterministic"}, store)
+	eng, err := sandbox.NewEngine(def, sandbox.Config{ID: "sbx_truth", Seed: opts.Seed, Mode: "deterministic", Recordings: opts.Recordings, RecordingsMode: opts.RecordingsMode}, store)
 	if err != nil {
 		return nil, err
 	}

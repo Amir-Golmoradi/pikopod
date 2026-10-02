@@ -34,6 +34,7 @@ type Config struct {
 	WallclockFaults   bool
 	Effective         *contract.Effective
 	Recordings        *replay.Set
+	RecordingsMode    string
 	Rules             *RuleSet
 }
 
@@ -67,6 +68,7 @@ type Engine struct {
 	mountPrefix     string
 	trace           func(stage, message string)
 	recordings      *replay.Set
+	recordingsFirst bool
 
 	webhookMu     sync.Mutex
 	webhookSeq    int64
@@ -97,6 +99,14 @@ func NewEngine(def *ir.ApiDefinition, cfg Config, store *Store) (*Engine, error)
 	if cfg.Mode != "" && cfg.Mode != "deterministic" && cfg.Mode != "nondeterministic" {
 		return nil, errfmt.Newf("sandbox engine", "use \"deterministic\" or \"nondeterministic\"", "", "unknown mode %q", cfg.Mode)
 	}
+	switch cfg.RecordingsMode {
+	case "", "first", "fallback", "off":
+	default:
+		return nil, errfmt.Newf("sandbox engine", "use \"first\", \"fallback\" or \"off\"", "", "unknown recordings mode %q", cfg.RecordingsMode)
+	}
+	if cfg.RecordingsMode == "off" {
+		cfg.Recordings = nil
+	}
 	if err := store.EnsureSandbox(cfg.ID); err != nil {
 		return nil, err
 	}
@@ -112,6 +122,7 @@ func NewEngine(def *ir.ApiDefinition, cfg Config, store *Store) (*Engine, error)
 		wallclockFaults: cfg.WallclockFaults,
 		effective:       cfg.Effective,
 		recordings:      cfg.Recordings,
+		recordingsFirst: cfg.Recordings != nil && cfg.RecordingsMode != "fallback",
 		quota:           cfg.Quota,
 		namedSchemas:    map[string]*ir.IrSchemaNode{},
 		authSchemes:     map[string]*ir.AuthScheme{},
@@ -466,6 +477,11 @@ func (e *Engine) serve(req *ingressRequest, innerPath string) (*RawResponse, err
 	op := deriveOperation(result.endpoint, result.pathParams)
 	e.tracef("operation", "kind=%v resource=%s", op.kind, op.typ)
 
+	recorded, template := e.recordedFirst(&op, req, innerPath)
+	if recorded != nil {
+		return recorded, nil
+	}
+
 	if op.kind == opPassthrough {
 		return e.buildSuccessResponse(result.endpoint), nil
 	}
@@ -478,6 +494,7 @@ func (e *Engine) serve(req *ingressRequest, innerPath string) (*RawResponse, err
 		req:        req,
 		innerPath:  innerPath,
 		isResource: isResource,
+		template:   template,
 	})
 }
 
