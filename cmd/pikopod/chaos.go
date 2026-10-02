@@ -170,7 +170,7 @@ func chaosList(resp *http.Response, out io.Writer) error {
 		Faults []sandbox.FaultRule `json:"faults"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return errfmt.Newf("the sandbox server answered with something unreadable", "upgrade pikopod so the CLI and server match", "scenarios/README.md", "%v", err)
+		return errfmt.Newf("the sandbox server answered with something unreadable", "check that `pikopod up` from this same pikopod build is what is listening on the sandbox port", "docs/config-reference.md#ports", "%v", err)
 	}
 	if len(list.Faults) == 0 {
 		fmt.Fprintln(out, "no standing faults")
