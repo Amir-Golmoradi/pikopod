@@ -161,6 +161,22 @@ func TestChaosListRendersOneLinePerFault(t *testing.T) {
 	}
 }
 
+func TestChaosListRendersWebhookFaultsByEvent(t *testing.T) {
+	admin := chaosTestAdmin(t, "chaos-list-2")
+	armedFault(t, admin, `{"kind":"drop_webhook","event":"widget.created"}`)
+	got := chaosListOutput(t, admin)
+	if got != "armed   drop_webhook on widget.created\n" {
+		t.Fatalf("a webhook fault must show its event, got %q", got)
+	}
+}
+
+func TestChaosListSaysWhenNothingIsArmed(t *testing.T) {
+	admin := chaosTestAdmin(t, "chaos-list-3")
+	if got := chaosListOutput(t, admin); strings.TrimSpace(got) != "no standing faults" {
+		t.Fatalf("an empty list must say so, got %q", got)
+	}
+}
+
 func chaosTestAdmin(t *testing.T, seed string) string {
 	t.Helper()
 	cfg := testConfig(t, "https://example.invalid")

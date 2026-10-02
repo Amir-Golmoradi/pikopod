@@ -162,7 +162,24 @@ func chaosRelay(resp *http.Response, out io.Writer, verb string) error {
 }
 
 func chaosList(resp *http.Response, out io.Writer) error {
-	return chaosRelay(resp, out, "standing faults")
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return errfmt.New("the sandbox server refused", fmt.Sprintf("%d: %s", resp.StatusCode, bytes.TrimSpace(raw)), "check the sandbox name (`pikopod sandbox list`) and flags", "")
+	}
+	var list struct {
+		Faults []sandbox.FaultRule `json:"faults"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return errfmt.Newf("the sandbox server answered with something unreadable", "upgrade pikopod so the CLI and server match", "scenarios/README.md", "%v", err)
+	}
+	if len(list.Faults) == 0 {
+		fmt.Fprintln(out, "no standing faults")
+		return nil
+	}
+	for i := range list.Faults {
+		fmt.Fprintf(out, "armed   %s\n", list.Faults[i].Describe())
+	}
+	return nil
 }
 
 func parseFaultBody(arg string) (json.RawMessage, error) {
