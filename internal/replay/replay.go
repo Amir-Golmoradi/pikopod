@@ -55,7 +55,11 @@ type Set struct {
 }
 
 func Load(dataDir, upstream string, extraVolatile []string) (*Set, error) {
-	path := filepath.Join(dataDir, "recordings", upstream+".ndjson")
+	return LoadFile(filepath.Join(dataDir, "recordings", upstream+".ndjson"), extraVolatile)
+}
+
+func LoadFile(path string, extraVolatile []string) (*Set, error) {
+	upstream := strings.TrimSuffix(filepath.Base(path), ".ndjson")
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, errfmt.Newf("no recordings for "+upstream, "run `pikopod up` and send traffic through the agent first", "docs/config-reference.md#data_dir", "%v", err)
@@ -126,6 +130,23 @@ func (s *Set) reportLocked(line ReportLine) {
 }
 
 func (s *Set) MatchValueDiag(method, path string, parsed any) (*proxy.Record, MatchDiag) {
+	return s.MatchValueWhere(method, path, parsed, nil)
+}
+
+func allowed(recs []*Recording, tier MatchTier, allow func(*proxy.Record, MatchTier) bool) []*Recording {
+	if allow == nil {
+		return recs
+	}
+	out := make([]*Recording, 0, len(recs))
+	for _, r := range recs {
+		if allow(&r.Record, tier) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy.Record, MatchTier) bool) (*proxy.Record, MatchDiag) {
 
 	exactK := s.exactKey(method, path, parsed)
 	shapeK := s.shapeKey(method, path, parsed)
@@ -134,7 +155,7 @@ func (s *Set) MatchValueDiag(method, path string, parsed any) (*proxy.Record, Ma
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if recs := s.exact[exactK]; len(recs) > 0 {
+	if recs := allowed(s.exact[exactK], TierExact, allow); len(recs) > 0 {
 
 		diag := MatchDiag{Tier: TierExact, SeqLen: len(recs)}
 		r := takeUnserved(recs)
@@ -152,14 +173,14 @@ func (s *Set) MatchValueDiag(method, path string, parsed any) (*proxy.Record, Ma
 		s.reportLocked(ReportLine{method, path, TierExact})
 		return &r.Record, diag
 	}
-	if recs := s.shape[shapeK]; len(recs) > 0 {
+	if recs := allowed(s.shape[shapeK], TierShape, allow); len(recs) > 0 {
 		r := takeUnserved(recs)
 		if r != nil {
 			s.reportLocked(ReportLine{method, path, TierShape})
 			return &r.Record, MatchDiag{Tier: TierShape, MissedOn: s.valueGap(parsed, r.Record.ReqBody)}
 		}
 	}
-	if recs := s.sequence[seqK]; len(recs) > 0 {
+	if recs := allowed(s.sequence[seqK], TierSequence, allow); len(recs) > 0 {
 		r := takeUnserved(recs)
 		if r == nil {
 

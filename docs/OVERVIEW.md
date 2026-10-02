@@ -45,9 +45,9 @@ production traffic does not depend on the sandbox being up.
 `up` always starts both listeners — there is no flag to run the agent alone —
 so the sandbox is present whether or not you registered one. The spec watcher is
 also part of `up`, not a separate command, and arms per-upstream whenever
-`spec_source` is set. Recordings made by the agent feed the sandbox's replay
-tier only when you ask for it with `--recordings-fallback` on `import` or
-`sandbox add`, never silently.
+`spec_source` is set. Recordings made by the agent answer the sandbox before
+the spec once they exist; `--recordings first|fallback|off` on `import` or
+`sandbox add` sets it, and `sandbox list` shows it.
 
 **If the process dies, traffic stops.** That is the direction that matters: one
 process is in your request path, so a crash, an OOM, or a bad deploy takes the

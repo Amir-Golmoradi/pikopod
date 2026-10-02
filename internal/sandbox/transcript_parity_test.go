@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pikopod/pikopod/internal/importer"
+	"github.com/pikopod/pikopod/internal/replay"
 )
 
 type transcriptStep struct {
@@ -29,6 +30,8 @@ type transcriptMeta struct {
 	VirtualClockMs  int64    `json:"virtualClockMs"`
 	Credential      string   `json:"credential"`
 	RulesFile       string   `json:"rulesFile,omitempty"`
+	RecordingsFile  string   `json:"recordingsFile,omitempty"`
+	Recordings      string   `json:"recordings,omitempty"`
 	NormalizedPaths []string `json:"normalizedPaths"`
 }
 
@@ -37,7 +40,7 @@ type transcript struct {
 	Steps []transcriptStep `json:"steps"`
 }
 
-var capturedRespHeaders = []string{"content-type", "etag", "allow", "link", "idempotent-replayed", "www-authenticate"}
+var capturedRespHeaders = []string{"content-type", "etag", "allow", "link", "idempotent-replayed", "www-authenticate", SourceHeader}
 
 func TestParity_SandboxTranscripts(t *testing.T) {
 	files, err := filepath.Glob("../../testdata/parity/sandbox/*.transcript.json")
@@ -85,14 +88,23 @@ func replayTranscript(t *testing.T, file string) {
 			t.Fatalf("load rules %s: %v", tr.Meta.RulesFile, err)
 		}
 	}
+	var recordings *replay.Set
+	if tr.Meta.RecordingsFile != "" {
+		recordings, err = replay.LoadFile(filepath.Join("../../testdata/parity", tr.Meta.RecordingsFile), nil)
+		if err != nil {
+			t.Fatalf("load recordings %s: %v", tr.Meta.RecordingsFile, err)
+		}
+	}
 	engine, err := NewEngine(def, Config{
 		ID:             "sbx_parity",
 		Seed:           tr.Meta.SandboxSeed,
 		Mode:           "deterministic",
 		VirtualClockMs: tr.Meta.VirtualClockMs,
 
-		Credential: tr.Meta.Credential,
-		Rules:      rules,
+		Credential:     tr.Meta.Credential,
+		Rules:          rules,
+		Recordings:     recordings,
+		RecordingsMode: tr.Meta.Recordings,
 	}, store)
 	if err != nil {
 		t.Fatalf("build engine: %v", err)

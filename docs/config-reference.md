@@ -414,10 +414,17 @@ Sandbox resource limits, fixed rather than configured:
 Exceeding them returns `413` or `507` rather than degrading silently. Reset a
 sandbox's state with `pikopod sandbox reset <name>`.
 
-## recordings-tier
+## recordings
 
-Recorded traffic is the sandbox's final resolution tier, enabled per sandbox
-with `pikopod import <name> --recordings-fallback`.
+Where a sandbox answer comes from, in order: a resource the sandbox itself
+stored, then a recording of the linked upstream whose method, path template
+and request shape match, then the spec. `pikopod import <name> --recordings
+first|fallback|off` sets it per sandbox; without the flag it is `first` when
+recordings exist for the upstream and `off` when none do, and `--update`
+re-evaluates that default. `fallback` serves recordings only for paths the
+spec does not declare. Every response built from a recording carries
+`X-Pikopod-Source: recorded`. A recorded 4xx or 5xx is served only on an
+exact request match.
 
 Matching is hierarchical, because one clever hash would miss on real payment
 traffic where every request carries different amounts and references:
