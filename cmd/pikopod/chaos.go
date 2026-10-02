@@ -62,7 +62,7 @@ func newChaosCmd() *cobra.Command {
 					return err
 				}
 				defer resp.Body.Close()
-				return chaosRelay(resp, out, "standing faults")
+				return chaosList(resp, out)
 			}
 
 			method, _ := cmd.Flags().GetString("method")
@@ -159,6 +159,10 @@ func chaosRelay(resp *http.Response, out io.Writer, verb string) error {
 	}
 	fmt.Fprintf(out, "%s: %s\n", verb, bytes.TrimSpace(raw))
 	return nil
+}
+
+func chaosList(resp *http.Response, out io.Writer) error {
+	return chaosRelay(resp, out, "standing faults")
 }
 
 func parseFaultBody(arg string) (json.RawMessage, error) {
