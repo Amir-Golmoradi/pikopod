@@ -49,7 +49,7 @@
     },
     "kind": {
       "type": "string",
-      "description": "Observed SHAPE kinds and INCIDENT kinds. The enum below is the set pikopod emits TODAY, not a closed set for all time - treat an unrecognised kind as informational rather than an error. Incident kinds (upstream_error, upstream_unreachable, rate_limited, client_error) describe a failed exchange and need no baseline. DECLARED events (source=declared) carry declared:<spec-diff check id>.",
+      "description": "Observed SHAPE kinds and INCIDENT kinds. The enum below is the set pikopod emits TODAY, not a closed set for all time - treat an unrecognised kind as informational rather than an error. Incident kinds (upstream_error, upstream_unreachable, rate_limited, client_error) describe a failed exchange and need no baseline. behaviour_divergence means the provider answered a recorded request differently from the sandbox built from its spec; it needs no baseline, carries the sandbox's status in before and the provider's in after, the request field names (never values) in field, and a category. DECLARED events (source=declared) carry declared:<spec-diff check id>.",
       "anyOf": [
         {
           "enum": [
@@ -64,7 +64,8 @@
             "upstream_error",
             "upstream_unreachable",
             "rate_limited",
-            "client_error"
+            "client_error",
+            "behaviour_divergence"
           ]
         },
         {
@@ -119,6 +120,15 @@
     "note": {
       "type": "string",
       "description": "Declared\u00d7observed join context (e.g. the provider's new spec version documents this change)."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "spec_drift",
+        "undocumented_rule",
+        "provider_failure"
+      ],
+      "description": "Present on behaviour_divergence only. spec_drift: the provider's status is not what the spec declares, or it accepted what the spec refuses. undocumented_rule: the provider refused, or answered with another error code, where the spec accepts. provider_failure: the provider answered 5xx or 429 where the sandbox would have succeeded."
     }
   }
 }

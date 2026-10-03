@@ -37,9 +37,9 @@ func newIncidentsCmd() *cobra.Command {
 			if limit <= 0 {
 				limit = defaultIncidentLimit
 			}
-			if only != "" && only != "incidents" && only != "drift" {
+			if only != "" && only != "incidents" && only != "drift" && only != "divergence" {
 				return errfmt.New("unknown class", only+" is not a class of event",
-					"use --only incidents or --only drift", "docs/exit-codes.md")
+					"use --only incidents, drift or divergence", "docs/exit-codes.md")
 			}
 			if format != "" && format != "text" && format != "json" {
 				return errfmt.New("unknown format", format+" is not a supported format",
@@ -59,7 +59,10 @@ func newIncidentsCmd() *cobra.Command {
 				if only == "incidents" && !ev.Kind.IsIncident() {
 					continue
 				}
-				if only == "drift" && ev.Kind.IsIncident() {
+				if only == "drift" && (ev.Kind.IsIncident() || ev.Kind.IsDivergence()) {
+					continue
+				}
+				if only == "divergence" && !ev.Kind.IsDivergence() {
 					continue
 				}
 				if kind != "" && string(ev.Kind) != kind {
@@ -88,7 +91,7 @@ func newIncidentsCmd() *cobra.Command {
 	c.Flags().String("upstream", "", "filter by upstream")
 	c.Flags().String("format", "text", "output format: text | json")
 	c.Flags().Int("limit", defaultIncidentLimit, "maximum events to show")
-	c.Flags().String("only", "", "narrow to one class: incidents (failed exchanges) | drift (shape changes)")
+	c.Flags().String("only", "", "narrow to one class: incidents (failed exchanges) | drift (shape changes) | divergence (the provider answered differently from the sandbox)")
 	return c
 }
 
@@ -142,7 +145,7 @@ in the window.`,
 			bundles := []*bridge.Bundle{}
 			for i := range evs {
 				ev := evs[i]
-				if !ev.Kind.IsIncident() || ev.LastSeen.Before(cutoff) {
+				if !(ev.Kind.IsIncident() || ev.Kind.IsDivergence()) || ev.LastSeen.Before(cutoff) {
 					continue
 				}
 				b, err := bridge.Export(cfg.DataDir, &ev, cfg.RetentionTTL(), host, now)
@@ -177,10 +180,16 @@ func renderIncidents(w io.Writer, evs []alert.DriftEvent, total int, truncated b
 		if ev.Kind.IsIncident() {
 			marker = "incident"
 		}
+		if ev.Kind.IsDivergence() {
+			marker = "divergence"
+		}
 		fmt.Fprintf(w, "[%s] %-8s %-22s %s %s (%s) · %d occurrence(s) · last %s\n  %s\n",
 			ev.Level, marker, ev.Kind, ev.Method, ev.Endpoint, ev.Upstream,
 			ev.Occurrences, ev.LastSeen.Format(time.RFC3339), ev.Fingerprint)
-		if ev.Kind.IsIncident() {
+		if ev.Kind.IsDivergence() {
+			fmt.Fprintf(w, "  %s: %s\n", ev.Category, ev.Detail)
+		}
+		if ev.Kind.IsIncident() || ev.Kind.IsDivergence() {
 			if until := bridge.ExpiresAt(&ev, retention); until != nil {
 				fmt.Fprintf(w, "  reproducible until %s\n", until.UTC().Format(time.RFC3339))
 			}

@@ -41,6 +41,8 @@ type DriftEvent struct {
 	Detail string `json:"detail,omitempty"`
 
 	Note string `json:"note,omitempty"`
+
+	Category string `json:"category,omitempty"`
 }
 
 func ObservedLevel(f drift.Finding) string {
@@ -226,6 +228,14 @@ func (a *Alerter) Report(f drift.Finding) {
 }
 
 func (a *Alerter) ReportDeclared(upstream string, fingerprint string, ev DriftEvent) {
+	a.reportFirst(upstream, fingerprint, ev, "declared")
+}
+
+func (a *Alerter) ReportObserved(upstream string, fingerprint string, ev DriftEvent) {
+	a.reportFirst(upstream, fingerprint, ev, "")
+}
+
+func (a *Alerter) reportFirst(upstream string, fingerprint string, ev DriftEvent, source string) {
 	now := a.now()
 
 	a.mu.Lock()
@@ -247,7 +257,9 @@ func (a *Alerter) ReportDeclared(upstream string, fingerprint string, ev DriftEv
 		ev.SchemaVersion = SchemaVersion
 		ev.Fingerprint = fingerprint
 		ev.Upstream = upstream
-		ev.Source = "declared"
+		if source != "" {
+			ev.Source = source
+		}
 		ev.FirstSeen, ev.LastSeen, ev.Occurrences = st.First, st.Last, st.Occurrences
 		st.Event = &ev
 		out = &ev
@@ -496,6 +508,7 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		drift.UpstreamUnreachable: "upstream unreachable",
 		drift.RateLimited:         "rate limited",
 		drift.ClientError:         "requests rejected",
+		drift.BehaviourDivergence: "provider diverged from the sandbox",
 	}[ev.Kind]
 	var detail string
 	switch ev.Kind {
@@ -523,6 +536,8 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		detail = fmt.Sprintf("upstream answered %s — reproduce the backoff path: `pikopod reproduce %s`", ev.After, ev.Fingerprint)
 	case drift.ClientError:
 		detail = fmt.Sprintf("upstream rejected our requests with %s above the configured rate — usually our own payload", ev.After)
+	case drift.BehaviourDivergence:
+		detail = fmt.Sprintf("%s: %s — reproduce it locally: `pikopod reproduce %s`", ev.Category, ev.Detail, ev.Fingerprint)
 	}
 	note := ""
 	if ev.Note != "" {
@@ -532,19 +547,29 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 	if ev.Note != "" && ev.Level == "INFO" {
 		icon = ":memo:"
 	}
+	if ev.Kind.IsDivergence() && ev.Level == "WARN" {
+		icon = ":warning:"
+	}
 
 	word, replay, portable := "drift", "from-drift", ""
-	if ev.Kind.IsIncident() {
+	if ev.Kind.IsIncident() || ev.Kind.IsDivergence() {
 		word, replay = "incident", "reproduce"
+		if ev.Kind.IsDivergence() {
+			word = "divergence"
+		}
 		if retention > 0 {
 			portable = " · reproducible until " + ev.LastSeen.Add(retention).UTC().Format(time.RFC3339)
 		}
 		portable += "\nexport: `pikopod agent incidents export " + ev.Fingerprint + "`"
 	}
+	replayCmd := "pikopod scenario " + replay
+	if replay == "reproduce" {
+		replayCmd = "pikopod reproduce"
+	}
 	return fmt.Sprintf(
-		"%s *pikopod %s — %s* on `%s %s` (%s)\n%s%s\nfingerprint `%s` · first seen %s · %d occurrence(s)%s\nreplay it: `pikopod scenario %s %s`",
+		"%s *pikopod %s — %s* on `%s %s` (%s)\n%s%s\nfingerprint `%s` · first seen %s · %d occurrence(s)%s\nreplay it: `%s %s`",
 		icon, word, head, ev.Method, ev.Endpoint, ev.Upstream, detail, note,
-		ev.Fingerprint, ev.FirstSeen.Format(time.RFC3339), ev.Occurrences, portable, replay, ev.Fingerprint)
+		ev.Fingerprint, ev.FirstSeen.Format(time.RFC3339), ev.Occurrences, portable, replayCmd, ev.Fingerprint)
 }
 
 func (a *Alerter) persist() {

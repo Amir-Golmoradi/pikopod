@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/pikopod/pikopod/internal/errfmt"
@@ -14,6 +15,20 @@ func (e *Engine) SetVirtualClockMs(ms int64) {
 		ms = SandboxBaseEpochMs
 	}
 	e.virtualClockMs = ms
+}
+
+func (e *Engine) DeclaredStatuses(method, innerPath string) (map[int]bool, bool) {
+	result := matchRoute(e.def.Endpoints, method, innerPath)
+	if result.kind != matchFound {
+		return nil, false
+	}
+	out := map[int]bool{}
+	for i := range result.endpoint.Responses {
+		if n, err := strconv.Atoi(result.endpoint.Responses[i].StatusCode); err == nil {
+			out[n] = true
+		}
+	}
+	return out, true
 }
 
 func (e *Engine) AuthHeader() (name, value string, ok bool) {
