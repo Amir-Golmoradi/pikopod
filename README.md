@@ -8,8 +8,8 @@
 <h1 align="center">pikopod</h1>
 
 <p align="center">
-  A sandbox for the third-party APIs you depend on. Built from the provider's spec,<br>
-  it fails on purpose, and it replays the exact failure production hit.
+  Every failure a third-party API throws at production becomes a test on your laptop the same day,<br>
+  and never reaches production twice. A sandbox built from the provider's spec, corrected by what the provider actually sends you.
 </p>
 
 <p align="center">
@@ -25,9 +25,9 @@
   <a href="https://pikopod.com">pikopod.com</a>
 </p>
 
-**Their sandbox only knows how to succeed.** ISo the first time your retry path runs for real, it runs against real money.
+**Their sandbox only knows how to succeed.** So the first time your retry path runs for real, it runs against real money.
 
-pikopod builds a sandbox from your provider's spec, makes it fail on purpose, and replays the exact failure production hit, on your laptop, as a test you keep.
+pikopod builds a sandbox from your provider's spec, makes it fail on purpose, learns from what the provider really sends, and replays the exact failure production hit, on your laptop, as a test you keep.
 
 One Go binary. Runs locally. No accounts, no telemetry, no cloud.
 
@@ -66,36 +66,45 @@ provider's responses, and prints the alerts. Runs in about a second.
 | | What it does | Docs |
 |---|---|---|
 | **Rehearse** | A deterministic sandbox built from the provider's spec. Eleven failure stories bind to it with nothing authored: declines, timeouts, retry storms, duplicate webhooks. | [Sandbox](https://docs.pikopod.com/sandbox/overview) · [Scenarios](https://docs.pikopod.com/scenarios/overview) |
-| **Observe** | A fail-open proxy in front of the real provider. It records failures from the first request and shape changes once it knows what normal is, then hands you a fingerprint. | [Observe](https://docs.pikopod.com/observe/overview) |
-| **Reproduce** | The fingerprint becomes a scenario that replays the production failure against the sandbox. Commit it, and the path is guarded forever. | [Reproduce](https://docs.pikopod.com/reproduce/reproduce) |
+| **Observe** | A fail-open proxy in front of the real provider. It records failures from the first request, reports what the provider did that the sandbox would not have, and shape changes once it knows what normal is. Every finding carries a fingerprint. | [Observe](https://docs.pikopod.com/observe/overview) · [Divergence](https://docs.pikopod.com/observe/divergence) |
+| **Reproduce** | The fingerprint becomes a scenario that replays the production failure against the sandbox. Commit it, and the path is guarded forever. The recordings also answer the sandbox before the spec, and a number says how much of the provider's real traffic it reproduces. | [Reproduce](https://docs.pikopod.com/reproduce/reproduce) · [Truthfulness](https://docs.pikopod.com/observe/truthfulness) |
 
 You cannot ask a provider's sandbox to return that exact 503, with that body,
 at that point in your state machine. pikopod can, because the same tool
 recorded it and owns the sandbox. See [The loop](https://docs.pikopod.com/getting-started/the-loop).
 
-## Start here: catch a breaking change in CI
+## Start here: turn last week's provider incident into a test
 
-No proxy, no account, no config file. It reads two versions of a spec straight
-from git with no checkout and fails the build on a breaking change:
+With `pikopod up` in front of the real provider in staging or production,
+every failure the provider throws is recorded, redacted, and listed with a
+handle:
 
 ```bash
-pikopod spec-diff git:origin/main:openapi.yaml openapi.yaml --fail-on ERR
+pikopod agent incidents
 ```
 
 ```
-1 change(s): 1 ERR, 0 WARN, 0 INFO
-
-ERR  GET    /charges/{id}                            endpoint-removed
-     endpoint removed from the spec  [fp_bcc85ba9a094]
-
-breaking declared drift at/above ERR — failing the gate (exit 1)
+[ERR] incident upstream_error         POST /charges (examplepay) · 4 occurrence(s) · last 2026-09-19T10:00:00Z
+  fp_14835fa32dfb
+  reproduce: pikopod reproduce fp_14835fa32dfb
+  export: pikopod agent incidents export fp_14835fa32dfb
 ```
 
-Exit `0` clean, `1` breaking, `2` tool error. Add `--format githubactions` and
-every finding lands inline on the pull request diff. Severity comes from one
-fixed rule, so "breaking" means the same thing on every endpoint and every
-provider. See [Spec diff](https://docs.pikopod.com/gate/spec-diff) and
-[CI integration](https://docs.pikopod.com/gate/ci-integration).
+```bash
+pikopod reproduce fp_14835fa32dfb
+```
+
+```
+reproduced fp_14835fa32dfb (examplepay answered 503 on POST /charges) as pikopod-data/scenarios/incident-14835fa32dfb.yaml
+PASSED — 1 assertion(s) passed; 0 not evaluated
+the failure now happens locally — fix it, then re-run: pikopod scenario check examplepay incident-14835fa32dfb
+```
+
+The generated pack is an ordinary scenario: commit it and it guards that path
+on every build. When the agent runs on another host,
+`pikopod agent incidents export <fp>` writes a bundle that `reproduce` accepts
+anywhere. See [Incidents](https://docs.pikopod.com/observe/incidents) and
+[Reproduce](https://docs.pikopod.com/reproduce/reproduce).
 
 ## Rehearse: make the sandbox fail
 
@@ -164,30 +173,48 @@ short, so it can sit in CI next to your test suite. `pikopod chaos` arms one
 fault directly. See [Modes](https://docs.pikopod.com/sandbox/modes) and
 [Faults](https://docs.pikopod.com/sandbox/faults).
 
-## Observe and reproduce
+## Observe: what the provider did that the sandbox would not have
 
 `pikopod up` also starts the observing agent on `:4700/examplepay`. Point your
 app's provider base URL at it, keeping your real credentials; it forwards
-everything untouched and watches. Incidents fire from the first request. Drift
-waits 50 samples and 48 hours per endpoint, because a baseline built from five
-responses has not seen your optional fields yet. `pikopod agent incidents` lists
-what failed, newest first, each with a fingerprint:
+everything untouched and watches. Incidents fire from the first request. So
+does divergence: every production answer is compared with what the sandbox
+would have said, and a 422 on a duplicate the spec never mentions becomes an
+event with a fingerprint and a reproduce command. Drift waits 50 samples and
+48 hours per endpoint, because a baseline built from five responses has not
+seen your optional fields yet.
+
+The recordings then answer the sandbox before the spec, so the sandbox learns
+from production, and `pikopod agent truthfulness examplepay` says how much of
+what the provider really sent it reproduces. `pikopod agent replay --ci` gates
+every build on recorded traffic, with no network and no provider account. See
+[Divergence](https://docs.pikopod.com/observe/divergence),
+[Precedence](https://docs.pikopod.com/sandbox/precedence),
+[Truthfulness](https://docs.pikopod.com/observe/truthfulness) and
+[Replay gate](https://docs.pikopod.com/observe/replay-gate).
+
+## Also: gate CI on a breaking spec change
+
+No proxy, no account, no config file. It reads two versions of a spec straight
+from git with no checkout and fails the build on a breaking change:
 
 ```bash
-pikopod reproduce fp_14835fa32dfb
+pikopod spec-diff git:origin/main:openapi.yaml openapi.yaml --fail-on ERR
 ```
 
 ```
-reproduced fp_14835fa32dfb (examplepay answered 503 on POST /charges) as pikopod-data/scenarios/incident-14835fa32dfb.yaml
-PASSED — 1 assertion(s) passed; 0 not evaluated
-the failure now happens locally — fix it, then re-run: pikopod scenario check examplepay incident-14835fa32dfb
+1 change(s): 1 ERR, 0 WARN, 0 INFO
+
+ERR  GET    /charges/{id}                            endpoint-removed
+     endpoint removed from the spec  [fp_bcc85ba9a094]
+
+breaking declared drift at/above ERR — failing the gate (exit 1)
 ```
 
-The generated pack is an ordinary scenario: commit it and it guards that path
-forever. `pikopod agent replay --ci` then gates every build on recorded traffic, with
-no network and no provider account. For a shape change rather than a failure,
-`pikopod scenario from-drift <fp>` pins the old contract instead. See
-[Drift](https://docs.pikopod.com/observe/drift) and [Replay gate](https://docs.pikopod.com/observe/replay-gate).
+Exit `0` clean, `1` breaking, `2` tool error. Add `--format githubactions` and
+every finding lands inline on the pull request diff. See
+[Spec diff](https://docs.pikopod.com/gate/spec-diff) and
+[CI integration](https://docs.pikopod.com/gate/ci-integration).
 
 ## It cannot slow your traffic down
 
