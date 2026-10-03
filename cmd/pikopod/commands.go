@@ -23,6 +23,7 @@ import (
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/ir"
 	"github.com/pikopod/pikopod/internal/proxy"
+	"github.com/pikopod/pikopod/internal/sandbox"
 	"github.com/pikopod/pikopod/internal/sanitize/specrules"
 	"github.com/pikopod/pikopod/internal/scenario/nl"
 	"github.com/pikopod/pikopod/internal/specdiff"
@@ -157,6 +158,7 @@ func newUpCmd() *cobra.Command {
 				a.SetContracts(contracts)
 				fmt.Fprintf(out2(cmd), "contract refinement ON: traffic refines %d linked contract(s)\n", len(contracts))
 			}
+			a.SetSandboxFork(func(upstream string) (*sandbox.Engine, func(), error) { return divergenceFork(cfg, upstream) })
 			if w, n := buildSpecWatcher(cfg, a); w != nil {
 				a.SetWatcher(w)
 				fmt.Fprintf(out2(cmd), "spec watch ON: %d declared source(s), re-checked every %s\n", n, cfg.SpecWatchInterval())

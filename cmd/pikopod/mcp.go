@@ -184,7 +184,7 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 		}})
 
 	s.Register(mcp.Tool{Name: "drift_events", Annotations: readOnly(),
-		Description: "Drift events and incidents the agent recorded for an upstream, from the local event log. Reports only changes observed in traffic that passed warmup (default 50 samples and 48 hours per endpoint): until then the verdict is UNVERIFIABLE with the samples seen and the gate, never an empty CLEAN. An endpoint that receives no traffic through the agent is invisible. Values are redacted; identifiers appear as tokens.",
+		Description: "Drift events and incidents the agent recorded for an upstream, from the local event log. Reports only changes observed in traffic that passed warmup (default 50 samples and 48 hours per endpoint): until then the verdict is UNVERIFIABLE with the samples seen and the gate, never an empty CLEAN. An endpoint that receives no traffic through the agent is invisible. Incidents and divergence events (kind behaviour_divergence: the provider answered differently from the sandbox built from its spec) need no warmup and fire from the first request. Values are redacted; identifiers appear as tokens.",
 		InputSchema: schema([]string{"upstream"}, map[string]any{"upstream": prop("string", "upstream name from pikopod.yaml"), "since": prop("string", "window like 24h (optional)"), "level": prop("string", "ERR | WARN | INFO (optional)"), "limit": prop("integer", "max events (default 50)")}),
 		Handler: func(_ context.Context, raw json.RawMessage) (any, error) {
 			var args struct {
@@ -237,10 +237,10 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 				return toolResult{Verdict: VerdictFindings, Warmup: w, Data: data}, nil
 			case w.NoBaselinesYet:
 				return toolResult{Verdict: VerdictUnverifiable, Warmup: w, Data: data,
-					Reason: fmt.Sprintf("%s has no baselines yet: the agent has not observed traffic for it (or data_dir differs), so nothing could have been detected; gate is %d samples and %dh per endpoint", args.Upstream, w.GateMinSamples, w.GateMinHours)}, nil
+					Reason: fmt.Sprintf("%s has no baselines yet: the agent has not observed traffic for it (or data_dir differs), so no drift could have been detected (incidents and divergence need no warmup, and none were recorded); gate is %d samples and %dh per endpoint", args.Upstream, w.GateMinSamples, w.GateMinHours)}, nil
 			case w.WarmedUp == 0:
 				return toolResult{Verdict: VerdictUnverifiable, Warmup: w, Data: data,
-					Reason: fmt.Sprintf("warmup incomplete: %d endpoint famil(ies) seen, none past the gate of %d samples and %dh, so no drift could have been reported yet", w.StillWarming, w.GateMinSamples, w.GateMinHours)}, nil
+					Reason: fmt.Sprintf("warmup incomplete: %d endpoint famil(ies) seen, none past the gate of %d samples and %dh, so no drift could have been reported yet (incidents and divergence need no warmup, and none were recorded)", w.StillWarming, w.GateMinSamples, w.GateMinHours)}, nil
 			default:
 				return toolResult{Verdict: VerdictClean, Warmup: w, Data: data,
 					Reason: fmt.Sprintf("no events for %d warmed-up endpoint famil(ies); %d still warming and cannot alert yet", w.WarmedUp, w.StillWarming)}, nil

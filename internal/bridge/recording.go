@@ -96,10 +96,16 @@ func faultForKind(kind drift.Kind, status int) map[string]any {
 }
 
 func BuildFromRecord(ev *alert.DriftEvent, rec *proxy.Record, contractVersion int) (string, map[string]any, error) {
-	if !ev.Kind.IsIncident() {
+	if !ev.Kind.IsIncident() && !ev.Kind.IsDivergence() {
 		return "", nil, errfmt.New("not an incident",
 			string(ev.Kind)+" is a shape change, not a failed exchange",
 			"use `pikopod scenario from-drift "+ev.Fingerprint+"` to pin the baseline contract instead",
+			"docs/exit-codes.md")
+	}
+	if ev.Kind.IsDivergence() && rec.Status < 400 {
+		return "", nil, errfmt.New("nothing to arm for this divergence",
+			fmt.Sprintf("the provider accepted the request (%d) where the sandbox refused it; a fault cannot make the sandbox accept", rec.Status),
+			"answer it by rule instead: write one with `pikopod rule add <sandbox> <file>` that responds "+strconv.Itoa(rec.Status)+" when the request looks like this one",
 			"docs/exit-codes.md")
 	}
 

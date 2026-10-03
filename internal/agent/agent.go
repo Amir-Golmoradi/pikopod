@@ -55,7 +55,12 @@ type Agent struct {
 
 	documented map[string]*documentedCache
 
-	EventsEmitted atomic.Int64
+	forks forkCache
+
+	EventsEmitted          atomic.Int64
+	DivergenceChecked      atomic.Int64
+	DivergenceUnverifiable atomic.Int64
+	DivergenceSkipped      atomic.Int64
 }
 
 type errCounts struct{ total, errors int }
@@ -253,6 +258,10 @@ func (a *Agent) observe(rec *proxy.Record) (notable bool) {
 		return notable
 	}
 
+	if a.checkDivergence(rec, obs.Template) {
+		notable = true
+	}
+
 	if kind, ok := a.incidentKind(rec, obs.Template); ok {
 		notable = true
 		a.EventsEmitted.Add(1)
@@ -379,6 +388,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			a.persistAll()
+			a.closeForks()
 
 			a.Alerter.Close()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -472,23 +482,26 @@ func (a *Agent) healthz(w http.ResponseWriter, r *http.Request) {
 	alertsSent, deliveryOK, deliveryErr := a.Alerter.DeliveryHealth()
 	deliveriesDropped, saturationEvictions, trackedFPs := a.Alerter.QueueStats()
 	out := map[string]any{
-		"status":                 "ok",
-		"uptime_seconds":         int(time.Since(a.started).Seconds()),
-		"requests_proxied":       a.Metrics.RequestsProxied.Load(),
-		"upstream_errors":        a.Metrics.UpstreamErrors.Load(),
-		"upstream_body_errors":   a.Metrics.UpstreamBodyErrors.Load(),
-		"recordings_written":     a.Metrics.RecordingsWritten.Load(),
-		"recordings_dropped":     a.Metrics.CapturesDropped.Load(),
-		"recordings_sampled_out": a.Metrics.RecordingsSampledOut.Load(),
-		"observer_panics":        a.Metrics.ObserverPanics.Load(),
-		"events_emitted":         a.EventsEmitted.Load(),
-		"alerts_sent":            alertsSent,
-		"last_delivery_ok":       deliveryOK,
-		"last_delivery_err":      deliveryErr,
-		"deliveries_dropped":     deliveriesDropped,
-		"saturation_evictions":   saturationEvictions,
-		"tracked_fingerprints":   trackedFPs,
-		"baselines":              fams,
+		"status":                  "ok",
+		"uptime_seconds":          int(time.Since(a.started).Seconds()),
+		"requests_proxied":        a.Metrics.RequestsProxied.Load(),
+		"upstream_errors":         a.Metrics.UpstreamErrors.Load(),
+		"upstream_body_errors":    a.Metrics.UpstreamBodyErrors.Load(),
+		"recordings_written":      a.Metrics.RecordingsWritten.Load(),
+		"recordings_dropped":      a.Metrics.CapturesDropped.Load(),
+		"recordings_sampled_out":  a.Metrics.RecordingsSampledOut.Load(),
+		"observer_panics":         a.Metrics.ObserverPanics.Load(),
+		"events_emitted":          a.EventsEmitted.Load(),
+		"divergence_checked":      a.DivergenceChecked.Load(),
+		"divergence_unverifiable": a.DivergenceUnverifiable.Load(),
+		"divergence_skipped":      a.DivergenceSkipped.Load(),
+		"alerts_sent":             alertsSent,
+		"last_delivery_ok":        deliveryOK,
+		"last_delivery_err":       deliveryErr,
+		"deliveries_dropped":      deliveriesDropped,
+		"saturation_evictions":    saturationEvictions,
+		"tracked_fingerprints":    trackedFPs,
+		"baselines":               fams,
 	}
 	if a.watch != nil {
 		out["spec_watch"] = a.watch.Health()

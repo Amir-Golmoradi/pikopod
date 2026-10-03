@@ -37,6 +37,8 @@ const (
 	ClientError Kind = "client_error"
 )
 
+const BehaviourDivergence Kind = "behaviour_divergence"
+
 func (k Kind) IsIncident() bool {
 	switch k {
 	case UpstreamError, UpstreamUnreachable, RateLimited, ClientError:
@@ -44,6 +46,8 @@ func (k Kind) IsIncident() bool {
 	}
 	return false
 }
+
+func (k Kind) IsDivergence() bool { return k == BehaviourDivergence }
 
 const presenceFloor = 0.98
 
