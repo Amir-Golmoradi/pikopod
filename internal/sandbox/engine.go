@@ -70,6 +70,7 @@ type Engine struct {
 	recordings      *replay.Set
 	recordingsFirst bool
 	seeding         seedState
+	scopes          scopeRegistry
 
 	webhookMu     sync.Mutex
 	webhookSeq    int64
@@ -196,6 +197,7 @@ type ingressRequest struct {
 	bodyPresent bool
 	bodyInvalid bool
 	bodyValue   any
+	scope       string
 
 	route *matchResult
 }
@@ -247,7 +249,14 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		headers[strings.ToLower(k)] = strings.Join(vs, ", ")
 	}
 
-	req := &ingressRequest{method: method, headers: headers, query: r.URL.Query()}
+	scope := headers[ScopeHeader]
+	delete(headers, ScopeHeader)
+	if len(scope) > maxScopeLen {
+		writeRaw(w, buildErrorResponse(400, ScopeHeader+" is longer than "+strconv.Itoa(maxScopeLen)+" characters", nil))
+		return
+	}
+	e.touchScope(scope)
+	req := &ingressRequest{method: method, headers: headers, query: r.URL.Query(), scope: scope}
 
 	wantsBody := method == "POST" || method == "PUT" || method == "PATCH"
 	rawBodyLen := 0
@@ -278,7 +287,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	entry := JournalEntry{Method: method, Path: innerPath, Status: resp.Status}
+	entry := JournalEntry{Method: method, Path: innerPath, Status: resp.Status, scope: scope}
 	if req.route != nil && req.route.kind == matchFound {
 		entry.Template = req.route.endpoint.PathTemplate.Value
 	}

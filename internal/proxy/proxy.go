@@ -170,6 +170,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	authed := s.token == "" || tokenMatches(r.Header.Get("X-Pikopod-Token"), s.token)
 
 	r.Header.Del("X-Pikopod-Token")
+	r.Header.Del("X-Pikopod-Scope")
 
 	for _, tap := range s.taps {
 		if r.URL.Path == tap.prefix {

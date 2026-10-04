@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -824,16 +825,33 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	if parts[3] == "requests" {
 
+		q := r.URL.Query()
+		scope, scoped := q.Get("scope"), q.Has("scope")
 		switch r.Method {
 		case http.MethodGet:
 			limit := 0
-			if v := r.URL.Query().Get("limit"); v != "" {
+			if v := q.Get("limit"); v != "" {
 				limit, _ = strconv.Atoi(v)
 			}
-			entries, evicted := engine.JournalEntries(limit)
-			json.NewEncoder(w).Encode(map[string]any{"requests": entries, "evicted": evicted})
+			var entries []sandbox.JournalEntry
+			var evicted int64
+			if scoped {
+				entries, evicted = engine.Scoped(scope).JournalEntries(limit)
+			} else {
+				entries, evicted = engine.JournalEntries(limit)
+			}
+			live, scopesEvicted := engine.Scopes()
+			body := map[string]any{"requests": entries, "evicted": evicted, "scopes": map[string]any{"live": live, "evicted": scopesEvicted}}
+			if scoped {
+				body["scope"] = scope
+			}
+			json.NewEncoder(w).Encode(body)
 		case http.MethodDelete:
-			engine.ResetJournal()
+			if scoped {
+				engine.ResetJournalScope(scope)
+			} else {
+				engine.ResetJournal()
+			}
 			json.NewEncoder(w).Encode(map[string]any{"reset": true})
 		default:
 			writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
@@ -963,13 +981,17 @@ func newSandboxRequestsCmd() *cobra.Command {
 			}
 			limit, _ := cmd.Flags().GetInt("last")
 			reset, _ := cmd.Flags().GetBool("reset")
-			url := fmt.Sprintf("%s://%s:%d/_pikopod/sandboxes/%s/requests", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, args[0])
+			scope, _ := cmd.Flags().GetString("scope")
+			url := fmt.Sprintf("%s://%s:%d/_pikopod/v1/sandboxes/%s/requests", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, args[0])
 			client := cfg.LocalClient(5 * time.Second)
 
 			var resp *http.Response
 			method, target := http.MethodGet, url+"?limit="+strconv.Itoa(limit)
 			if reset {
-				method, target = http.MethodDelete, url
+				method, target = http.MethodDelete, url+"?"
+			}
+			if cmd.Flags().Changed("scope") {
+				target += "&scope=" + neturl.QueryEscape(scope)
 			}
 			req, _ := http.NewRequest(method, target, nil)
 			if token := cfg.Token(); token != "" {
@@ -986,12 +1008,20 @@ func newSandboxRequestsCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if reset {
+				if cmd.Flags().Changed("scope") {
+					fmt.Fprintf(out, "journal reset for scope %q\n", scope)
+					return nil
+				}
 				fmt.Fprintln(out, "journal reset")
 				return nil
 			}
 			var payload struct {
 				Requests []sandbox.JournalEntry `json:"requests"`
 				Evicted  int64                  `json:"evicted"`
+				Scopes   struct {
+					Live    int   `json:"live"`
+					Evicted int64 `json:"evicted"`
+				} `json:"scopes"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 				return err
@@ -1007,14 +1037,21 @@ func newSandboxRequestsCmd() *cobra.Command {
 				fmt.Fprintln(out, line)
 			}
 			fmt.Fprintf(out, "%d request(s)", len(payload.Requests))
+			if cmd.Flags().Changed("scope") {
+				fmt.Fprintf(out, " in scope %q", scope)
+			}
 			if payload.Evicted > 0 {
 				fmt.Fprintf(out, " — %d older entries EVICTED (upper-bound verifications fail closed)", payload.Evicted)
+			}
+			if payload.Scopes.Live > 0 || payload.Scopes.Evicted > 0 {
+				fmt.Fprintf(out, " — %d live scope(s), %d evicted", payload.Scopes.Live, payload.Scopes.Evicted)
 			}
 			fmt.Fprintln(out)
 			return nil
 		}}
 	c.Flags().Int("last", 50, "number of most recent requests to show")
 	c.Flags().Bool("reset", false, "clear the journal (and its eviction taint)")
+	c.Flags().String("scope", "", "show or reset one partition: the requests sent with this X-Pikopod-Scope header")
 	return c
 }
 

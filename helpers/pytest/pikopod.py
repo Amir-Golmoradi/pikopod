@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import urllib.error
@@ -5,6 +6,14 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_URL = os.environ.get("PIKOPOD_URL", "http://127.0.0.1:4600")
+MAX_SCOPE = 128
+
+
+def test_scope(node_id):
+    scope = f"{node_id}:{os.environ.get('PYTEST_XDIST_WORKER', '')}"
+    if len(scope) <= MAX_SCOPE:
+        return scope
+    return hashlib.sha256(scope.encode()).hexdigest()
 
 
 class PikopodError(Exception):
@@ -14,12 +23,23 @@ class PikopodError(Exception):
 
 
 class Pikopod:
-    def __init__(self, sandbox, base_url=DEFAULT_URL, token=None, credential=None):
+    def __init__(self, sandbox, base_url=DEFAULT_URL, token=None, credential=None, scope=None):
         self.base_url = base_url.rstrip("/")
         self.sandbox = sandbox
         self.token = token or os.environ.get("PIKOPOD_TOKEN")
         self.credential = credential
+        self.scope = scope
         self.parent = None
+
+    def scoped(self, scope):
+        child = Pikopod(self.sandbox, base_url=self.base_url, token=self.token, credential=self.credential, scope=scope)
+        child.parent = self.parent
+        return child
+
+    def _scope_query(self, action):
+        if not self.scope:
+            return action
+        return f"{action}{'&' if '?' in action else '?'}scope={urllib.parse.quote(self.scope)}"
 
     def url(self):
         return f"{self.base_url}/{self.sandbox}"
@@ -29,6 +49,8 @@ class Pikopod:
         h.update(extra or {})
         if self.token:
             h["x-pikopod-token"] = self.token
+        if self.scope:
+            h["x-pikopod-scope"] = self.scope
         if self.credential and "authorization" not in {k.lower() for k in h}:
             h["authorization"] = f"Bearer {self.credential}"
         return h
@@ -67,7 +89,7 @@ class Pikopod:
         return self.call("POST", "mode", {"name": name, "bind": bind or {}})["mode"]
 
     def verify(self):
-        result = self.call("POST", "mode/verify")["result"]
+        result = self.call("POST", self._scope_query("mode/verify"))["result"]
         result["passed"] = result.get("status") == "PASSED"
         return result
 
@@ -87,7 +109,7 @@ class Pikopod:
 
     def requests(self, limit=0):
         action = f"requests?limit={limit}" if limit else "requests"
-        return self.call("GET", action).get("requests") or []
+        return self.call("GET", self._scope_query(action)).get("requests") or []
 
     def seed(self, items):
         return self.call("POST", "seed", items)

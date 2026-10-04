@@ -1,6 +1,17 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const DEFAULT_URL = process.env.PIKOPOD_URL || 'http://127.0.0.1:4600';
+const MAX_SCOPE = 128;
+
+function testScope() {
+  const state = globalThis.expect && typeof globalThis.expect.getState === 'function' ? globalThis.expect.getState() : null;
+  const name = state && state.currentTestName;
+  if (!name) throw new Error('scoped() needs a scope: pass one, or call it inside a Jest test');
+  const scope = `${name}:${process.env.JEST_WORKER_ID || ''}`;
+  return scope.length <= MAX_SCOPE ? scope : crypto.createHash('sha256').update(scope).digest('hex');
+}
 
 class PikopodError extends Error {
   constructor(status, message) {
@@ -10,12 +21,24 @@ class PikopodError extends Error {
 }
 
 class Pikopod {
-  constructor({ baseUrl = DEFAULT_URL, sandbox, token = process.env.PIKOPOD_TOKEN, credential } = {}) {
+  constructor({ baseUrl = DEFAULT_URL, sandbox, token = process.env.PIKOPOD_TOKEN, credential, scope } = {}) {
     if (!sandbox) throw new Error('Pikopod needs a sandbox name');
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.sandbox = sandbox;
     this.token = token;
     this.credential = credential;
+    this.scope = scope;
+  }
+
+  scoped(scope = testScope()) {
+    const child = new Pikopod({ baseUrl: this.baseUrl, sandbox: this.sandbox, token: this.token, credential: this.credential, scope });
+    child.parent = this.parent;
+    return child;
+  }
+
+  scopeQuery(action) {
+    if (!this.scope) return action;
+    return `${action}${action.includes('?') ? '&' : '?'}scope=${encodeURIComponent(this.scope)}`;
   }
 
   url() {
@@ -25,6 +48,7 @@ class Pikopod {
   headers(extra = {}) {
     const h = { 'content-type': 'application/json', ...extra };
     if (this.token) h['x-pikopod-token'] = this.token;
+    if (this.scope) h['x-pikopod-scope'] = this.scope;
     if (this.credential && !h.authorization) h.authorization = `Bearer ${this.credential}`;
     return h;
   }
@@ -59,7 +83,7 @@ class Pikopod {
   }
 
   async verify() {
-    const { result } = await this.call('POST', 'mode/verify');
+    const { result } = await this.call('POST', this.scopeQuery('mode/verify'));
     return { ...result, passed: result.status === 'PASSED' };
   }
 
@@ -81,7 +105,7 @@ class Pikopod {
   }
 
   async requests(limit = 0) {
-    return (await this.call('GET', limit ? `requests?limit=${limit}` : 'requests')).requests || [];
+    return (await this.call('GET', this.scopeQuery(limit ? `requests?limit=${limit}` : 'requests'))).requests || [];
   }
 
   async seed(items) {
@@ -105,4 +129,4 @@ class Pikopod {
   }
 }
 
-module.exports = { Pikopod, PikopodError };
+module.exports = { Pikopod, PikopodError, testScope };
