@@ -47,6 +47,22 @@ test('a client that gives up fails verify', async () => {
   }
 });
 
+test('two scoped clients run retry_storm at once against one sandbox', async () => {
+  const fork = await new Pikopod({ sandbox: SANDBOX }).fork();
+  try {
+    await fork.mode('retry_storm');
+    const [a, b] = [fork.scoped('worker-a'), fork.scoped('worker-b')];
+    const statuses = await Promise.all([createCharge(a, 5), createCharge(b, 5)]);
+    assert.deepEqual(statuses, [201, 201]);
+    assert.equal((await a.verify()).passed, true);
+    assert.equal((await b.verify()).passed, true);
+    assert.equal((await a.requests()).length, 3);
+    assert.equal((await fork.requests()).length, 6);
+  } finally {
+    await fork.delete();
+  }
+});
+
 test('seed, chaos and reset', async () => {
   const fork = await new Pikopod({ sandbox: SANDBOX }).fork();
   try {

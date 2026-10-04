@@ -34,6 +34,8 @@ type JournalEntry struct {
 
 	AtMs   int64 `json:"atMs"`
 	WallMs int64 `json:"wallMs"`
+
+	scope string
 }
 
 type journal struct {
@@ -161,46 +163,82 @@ func templateSegmentsMatch(query, target string) bool {
 	return true
 }
 
-func (e *Engine) JournalCount(method, template string) (count int, evicted bool) {
-	e.journal.mu.Lock()
-	defer e.journal.mu.Unlock()
-	for i := range e.journal.entries {
-		if e.journal.entries[i].matches(method, template) {
+func (entry *JournalEntry) inScope(scope string, only bool) bool {
+	return !only || entry.scope == scope
+}
+
+func (j *journal) count(scope string, only bool, method, template string) (count int, evicted bool) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for i := range j.entries {
+		if j.entries[i].inScope(scope, only) && j.entries[i].matches(method, template) {
 			count++
 		}
 	}
-	return count, e.journal.evicted > 0
+	return count, j.evicted > 0
+}
+
+func (j *journal) last(scope string, only bool, method, template string) (entry *JournalEntry, found, evicted bool) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	for i := len(j.entries) - 1; i >= 0; i-- {
+		if j.entries[i].inScope(scope, only) && j.entries[i].matches(method, template) {
+			cp := j.entries[i]
+			return &cp, true, j.evicted > 0
+		}
+	}
+	return nil, false, j.evicted > 0
+}
+
+func (j *journal) list(scope string, only bool, limit int) (entries []JournalEntry, evicted int64) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	out := make([]JournalEntry, 0, len(j.entries))
+	for i := range j.entries {
+		if j.entries[i].inScope(scope, only) {
+			out = append(out, j.entries[i])
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out, j.evicted
+}
+
+func (j *journal) dropScope(scope string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	kept := j.entries[:0]
+	for _, entry := range j.entries {
+		if entry.scope != scope {
+			kept = append(kept, entry)
+		}
+	}
+	j.entries = kept
+}
+
+func (e *Engine) JournalCount(method, template string) (count int, evicted bool) {
+	return e.journal.count("", false, method, template)
 }
 
 func (e *Engine) JournalLast(method, template string) (entry *JournalEntry, found, evicted bool) {
-	e.journal.mu.Lock()
-	defer e.journal.mu.Unlock()
-	for i := len(e.journal.entries) - 1; i >= 0; i-- {
-		if e.journal.entries[i].matches(method, template) {
-			cp := e.journal.entries[i]
-			return &cp, true, e.journal.evicted > 0
-		}
-	}
-	return nil, false, e.journal.evicted > 0
+	return e.journal.last("", false, method, template)
 }
 
 func (e *Engine) JournalEntries(limit int) (entries []JournalEntry, evicted int64) {
-	e.journal.mu.Lock()
-	defer e.journal.mu.Unlock()
-	all := e.journal.entries
-	if limit > 0 && len(all) > limit {
-		all = all[len(all)-limit:]
-	}
-	out := make([]JournalEntry, len(all))
-	copy(out, all)
-	return out, e.journal.evicted
+	return e.journal.list("", false, limit)
 }
 
 func (e *Engine) ResetJournal() {
 	e.journal.mu.Lock()
-	defer e.journal.mu.Unlock()
 	e.journal.entries = nil
 	e.journal.evicted = 0
+	e.journal.mu.Unlock()
+	e.resetScopes()
+}
+
+func (e *Engine) ResetJournalScope(scope string) {
+	e.journal.dropScope(scope)
 }
 
 type SequenceFields struct {

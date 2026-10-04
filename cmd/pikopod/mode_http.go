@@ -100,10 +100,16 @@ func (s *sandboxServer) serveModeVerify(w http.ResponseWriter, r *http.Request, 
 		writeSandboxJSONError(w, http.StatusNotFound, "unknown sandbox "+name)
 		return
 	}
-	res, err := mode.Verify(engine, spec, entry.Seed)
+	scope := r.URL.Query().Get("scope")
+	res, err := mode.Verify(engine.Scoped(scope), spec, entry.Seed)
 	if err != nil {
 		writeSandboxJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]any{"result": res, "mode": spec.Name})
+	live, evicted := engine.Scopes()
+	body := map[string]any{"result": res, "mode": spec.Name, "scopes": map[string]any{"live": live, "evicted": evicted}}
+	if scope != "" {
+		body["scope"] = scope
+	}
+	json.NewEncoder(w).Encode(body)
 }

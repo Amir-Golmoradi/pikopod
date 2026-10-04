@@ -1,4 +1,5 @@
 import os
+import threading
 import unittest
 
 from pikopod import Pikopod
@@ -35,6 +36,25 @@ class RetryStormTest(unittest.TestCase):
         result = self.fork.verify()
         self.assertFalse(result["passed"])
         self.assertIn("never matched", result["summary"])
+
+    def test_two_scoped_clients_run_retry_storm_at_once(self):
+        self.fork.mode("retry_storm")
+        clients = [self.fork.scoped("worker-a"), self.fork.scoped("worker-b")]
+        statuses = {}
+
+        def run(client):
+            statuses[client.scope] = create_charge(client, 5)
+
+        threads = [threading.Thread(target=run, args=(c,)) for c in clients]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(statuses, {"worker-a": 201, "worker-b": 201})
+        for client in clients:
+            self.assertTrue(client.verify()["passed"])
+            self.assertEqual(len(client.requests()), 3)
+        self.assertEqual(len(self.fork.requests()), 6)
 
     def test_seed_chaos_and_reset(self):
         self.fork.seed({"charges": [{"id": "ch_1", "amount": 100, "currency": "usd", "status": "success"}]})

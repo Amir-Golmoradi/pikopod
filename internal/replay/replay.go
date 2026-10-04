@@ -24,7 +24,7 @@ import (
 type Recording struct {
 	Record proxy.Record
 
-	served bool
+	served map[string]bool
 }
 
 type MatchTier string
@@ -147,6 +147,10 @@ func allowed(recs []*Recording, tier MatchTier, allow func(*proxy.Record, MatchT
 }
 
 func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy.Record, MatchTier) bool) (*proxy.Record, MatchDiag) {
+	return s.MatchValueScoped("", method, path, parsed, allow)
+}
+
+func (s *Set) MatchValueScoped(scope, method, path string, parsed any, allow func(*proxy.Record, MatchTier) bool) (*proxy.Record, MatchDiag) {
 
 	exactK := s.exactKey(method, path, parsed)
 	shapeK := s.shapeKey(method, path, parsed)
@@ -158,7 +162,7 @@ func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy
 	if recs := allowed(s.exact[exactK], TierExact, allow); len(recs) > 0 {
 
 		diag := MatchDiag{Tier: TierExact, SeqLen: len(recs)}
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r == nil {
 			r = recs[len(recs)-1]
 			diag.SeqPos, diag.Held = len(recs), true
@@ -174,17 +178,16 @@ func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy
 		return &r.Record, diag
 	}
 	if recs := allowed(s.shape[shapeK], TierShape, allow); len(recs) > 0 {
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r != nil {
 			s.reportLocked(ReportLine{method, path, TierShape})
 			return &r.Record, MatchDiag{Tier: TierShape, MissedOn: s.valueGap(parsed, r.Record.ReqBody)}
 		}
 	}
 	if recs := allowed(s.sequence[seqK], TierSequence, allow); len(recs) > 0 {
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r == nil {
-
-			recs[0].served = false
+			delete(recs[0].served, scope)
 			r = recs[0]
 		}
 		s.reportLocked(ReportLine{method, path, TierSequence})
@@ -300,14 +303,27 @@ func absInt(n int) int {
 	return n
 }
 
-func takeUnserved(recs []*Recording) *Recording {
+func takeUnserved(recs []*Recording, scope string) *Recording {
 	for _, r := range recs {
-		if !r.served {
-			r.served = true
+		if !r.served[scope] {
+			if r.served == nil {
+				r.served = map[string]bool{}
+			}
+			r.served[scope] = true
 			return r
 		}
 	}
 	return nil
+}
+
+func (s *Set) ForgetScope(scope string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, recs := range s.sequence {
+		for _, r := range recs {
+			delete(r.served, scope)
+		}
+	}
 }
 
 func (s *Set) exactKey(method, path string, body any) string {

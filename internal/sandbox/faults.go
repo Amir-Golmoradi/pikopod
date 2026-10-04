@@ -47,13 +47,13 @@ func windowKey(per string, req *ingressRequest, innerPath string) string {
 	switch per {
 	case "idempotency-key":
 		if k := req.header("idempotency-key"); k != nil {
-			return "ik:" + *k
+			return scopedKey(req.scope, "ik:"+*k)
 		}
-		return ""
+		return scopedKey(req.scope, "")
 	case "resource":
-		return "path:" + innerPath
+		return scopedKey(req.scope, "path:"+innerPath)
 	default:
-		return ""
+		return scopedKey(req.scope, "")
 	}
 }
 
