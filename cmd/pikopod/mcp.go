@@ -523,6 +523,16 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			}
 			result, _ := body["result"].(map[string]any)
 			status, _ := result["status"].(string)
+			if steps, _ := result["steps"].([]any); steps != nil {
+				for _, st := range steps {
+					if detail, _ := st.(map[string]any)["detail"].(map[string]any); detail != nil {
+						if closest, _ := detail["closest"].(string); closest != "" {
+							body["closest"] = closest
+							break
+						}
+					}
+				}
+			}
 			switch status {
 			case scenario.RunPassed:
 				return toolResult{Verdict: VerdictClean, Data: body}, nil

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/pikopod/pikopod/internal/errfmt"
+	"github.com/pikopod/pikopod/internal/pathtmpl"
 	"github.com/pikopod/pikopod/internal/sandbox"
 )
 
@@ -802,6 +803,7 @@ func (r *runner) verifySequence(step *Step) (stepOutcome, error) {
 			return stepOutcome{}, err
 		}
 		found := false
+		start := idx
 		for ; idx < len(entries); idx++ {
 			entry := &entries[idx]
 			if !entry.MatchesSequence(sandbox.SequenceFields{Method: m.Method, Headers: m.Headers, Query: m.Query}, path) {
@@ -819,9 +821,12 @@ func (r *runner) verifySequence(step *Step) (stepOutcome, error) {
 			break
 		}
 		if !found {
-			return r.failedVerification(step, fmt.Sprintf(
-				"matcher %d (%s %s) never matched; scanned %d of %d journaled request(s)",
-				mi, orAny(m.Method), orAny(path), idx, len(entries))), nil
+			closest := closestEntry(entries, m, path, start, mi)
+			out := r.failedVerification(step, fmt.Sprintf(
+				"matcher %d (%s %s) never matched; scanned %d of %d journaled request(s); %s",
+				mi, orAny(m.Method), orAny(path), idx, len(entries), closest))
+			out.detail["closest"] = closest
+			return out, nil
 		}
 	}
 	return stepOutcome{
@@ -830,6 +835,103 @@ func (r *runner) verifySequence(step *Step) (stepOutcome, error) {
 		detail:          map[string]any{"matchers": len(cfg.Requests), "journaled": len(entries)},
 		intrinsicChecks: len(cfg.Requests),
 	}, nil
+}
+
+const maxClosestDiffs = 6
+
+func shownPath(entry *sandbox.JournalEntry) string {
+	if entry.Template != "" {
+		return entry.Template
+	}
+	p := entry.Path
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		p = p[:i]
+	}
+	return pathtmpl.Templatize(p)
+}
+
+func closestEntry(entries []sandbox.JournalEntry, m *SequenceMatcher, path string, consumed, matcherIndex int) string {
+	if len(entries) == 0 {
+		return "closest: none (the journal is empty)"
+	}
+	if consumed >= len(entries) {
+		entry := &entries[len(entries)-1]
+		return fmt.Sprintf("closest: %s %s (request %d of %d) already matched matcher %d; no later request matched",
+			entry.Method, shownPath(entry), len(entries), len(entries), matcherIndex-1)
+	}
+	best, bestScore := -1, -1
+	for i := consumed; i < len(entries); i++ {
+		score := closenessScore(&entries[i], m, path)
+		if score > bestScore {
+			best, bestScore = i, score
+		}
+	}
+	entry := &entries[best]
+	diffs := closenessDiffs(entry, m, path)
+	head := fmt.Sprintf("closest: %s %s (request %d of %d)", entry.Method, shownPath(entry), best+1, len(entries))
+	if len(diffs) == 0 {
+		return head + " matched on method, path, headers and query"
+	}
+	if len(diffs) > maxClosestDiffs {
+		diffs = append(diffs[:maxClosestDiffs], "…")
+	}
+	return head + " — differed on: " + strings.Join(diffs, ", ")
+}
+
+func closenessScore(entry *sandbox.JournalEntry, m *SequenceMatcher, path string) int {
+	score := 0
+	if m.Method == "" || strings.EqualFold(entry.Method, m.Method) {
+		score += 1 << 12
+	}
+	if entry.MatchesSequence(sandbox.SequenceFields{Method: m.Method}, path) {
+		score += 1 << 8
+	}
+	for k := range m.Headers {
+		if _, present := entry.Headers[strings.ToLower(k)]; present {
+			score += 1 << 4
+		}
+	}
+	for k := range m.Query {
+		if _, present := entry.Query[k]; present {
+			score++
+		}
+	}
+	return score
+}
+
+func closenessDiffs(entry *sandbox.JournalEntry, m *SequenceMatcher, path string) []string {
+	var diffs []string
+	if m.Method != "" && !strings.EqualFold(entry.Method, m.Method) {
+		diffs = append(diffs, fmt.Sprintf("method %s vs %s", entry.Method, m.Method))
+	}
+	if path != "" && !entry.MatchesSequence(sandbox.SequenceFields{}, path) {
+		diffs = append(diffs, fmt.Sprintf("path %s vs %s", shownPath(entry), path))
+	}
+	for _, k := range sortedKeys(m.Headers) {
+		got, present := entry.Headers[strings.ToLower(k)]
+		switch {
+		case !present:
+			diffs = append(diffs, "header "+strings.ToLower(k)+" absent")
+		case got != m.Headers[k]:
+			diffs = append(diffs, "header "+strings.ToLower(k)+" differs")
+		}
+	}
+	for _, k := range sortedKeys(m.Query) {
+		vals := entry.Query[k]
+		hit := false
+		for _, v := range vals {
+			if v == m.Query[k] {
+				hit = true
+			}
+		}
+		switch {
+		case len(vals) == 0:
+			diffs = append(diffs, "query "+k+" absent")
+		case !hit:
+			diffs = append(diffs, "query "+k+" differs")
+		}
+	}
+	return diffs
 }
 
 func orAny(s string) string {
