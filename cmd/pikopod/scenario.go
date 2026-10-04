@@ -44,6 +44,10 @@ func loadSandboxDef(cfg *config.Config, name string) (*sandboxEntry, *ir.ApiDefi
 }
 
 func scenarioEngine(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefinition, persist bool, contractVersion int) (*sandbox.Engine, func(), error) {
+	return scenarioEngineFrom(cfg, entry, def, persist, false, contractVersion)
+}
+
+func scenarioEngineFrom(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefinition, persist, copyState bool, contractVersion int) (*sandbox.Engine, func(), error) {
 	var st *sandbox.Store
 	var err error
 	if persist {
@@ -57,6 +61,14 @@ func scenarioEngine(cfg *config.Config, entry *sandboxEntry, def *ir.ApiDefiniti
 	id := entry.ID
 	if !persist {
 		id = entry.ID + "_ephemeral"
+		if copyState {
+			if real, openErr := sandbox.OpenStore(cfg.DataDir); openErr == nil {
+				if recs, serErr := real.Serialize(entry.ID); serErr == nil && len(recs) > 0 {
+					st.Load(id, recs)
+				}
+				real.Close()
+			}
+		}
 	}
 	signingKey, err := webhookSigningKey(def)
 	if err != nil {

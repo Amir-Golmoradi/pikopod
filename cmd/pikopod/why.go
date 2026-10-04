@@ -40,7 +40,7 @@ func explainRequest(cmd *cobra.Command, name, method, path, body string, withAut
 		return err
 	}
 
-	eng, done, err := scenarioEngine(cfg, entry, def, false, 0)
+	eng, done, err := scenarioEngineFrom(cfg, entry, def, false, true, 0)
 	if err != nil {
 		return err
 	}
