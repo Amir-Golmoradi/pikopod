@@ -69,6 +69,7 @@ type Engine struct {
 	trace           func(stage, message string)
 	recordings      *replay.Set
 	recordingsFirst bool
+	seeding         seedState
 
 	webhookMu     sync.Mutex
 	webhookSeq    int64
