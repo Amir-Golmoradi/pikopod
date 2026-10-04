@@ -33,6 +33,7 @@ type Exchange struct {
 	Truncated  bool
 	Start      time.Time
 	Duration   time.Duration
+	Inbound    bool
 
 	release func()
 }
@@ -55,6 +56,9 @@ type Metrics struct {
 	RecordingErrors    atomic.Int64
 
 	RecordingsSampledOut atomic.Int64
+
+	WebhooksReceived atomic.Int64
+	WebhooksDropped  atomic.Int64
 }
 
 const maxCapturedBody = 1 << 20
@@ -73,6 +77,7 @@ type Server struct {
 	captures    chan *Exchange
 	queuedBytes atomic.Int64
 	proxies     []*upstreamProxy
+	taps        []*upstreamProxy
 	healthz     http.Handler
 	ack         http.Handler
 	accept      http.Handler
@@ -126,6 +131,29 @@ func New(cfg *config.Config, m *Metrics, captureDepth int) (*Server, error) {
 		}
 		up.rp = rp
 		s.proxies = append(s.proxies, up)
+		if u.Webhooks != nil && u.Webhooks.Receiver != "" {
+			recv, err := url.Parse(u.Webhooks.Receiver)
+			if err != nil || recv.Scheme == "" || recv.Host == "" {
+				return nil, errfmt.New("invalid webhook receiver", "upstreams."+name+".webhooks.receiver is not an absolute URL", "use the full URL your app listens on for this provider's webhooks", "docs/config-reference.md#upstreams")
+			}
+			tap := &upstreamProxy{name: name, prefix: "/hooks/" + name, target: recv}
+			tap.rp = &httputil.ReverseProxy{
+				FlushInterval: -1,
+				Rewrite: func(pr *httputil.ProxyRequest) {
+					pr.SetURL(recv)
+					pr.Out.URL.Path = recv.Path
+					pr.Out.URL.RawPath = recv.RawPath
+					pr.Out.URL.RawQuery = recv.RawQuery
+					pr.Out.Host = recv.Host
+				},
+				ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+					m.UpstreamErrors.Add(1)
+					w.Header().Set("X-Pikopod-Error", "receiver-unreachable")
+					http.Error(w, "pikopod: webhook receiver unreachable: "+err.Error(), http.StatusBadGateway)
+				},
+			}
+			s.taps = append(s.taps, tap)
+		}
 	}
 	return s, nil
 }
@@ -142,6 +170,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	authed := s.token == "" || tokenMatches(r.Header.Get("X-Pikopod-Token"), s.token)
 
 	r.Header.Del("X-Pikopod-Token")
+
+	for _, tap := range s.taps {
+		if r.URL.Path == tap.prefix {
+			s.forward(tap, w, r, true)
+			return
+		}
+	}
 
 	if s.token == "" && !loopbackHost(r.Host) {
 		http.Error(w, "pikopod: refusing non-local Host header on a tokenless listener (DNS-rebinding guard) — set PIKOPOD_TOKEN to serve other hostnames", http.StatusForbidden)
@@ -171,15 +206,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, up := range s.proxies {
 		if r.URL.Path == up.prefix || strings.HasPrefix(r.URL.Path, up.prefix+"/") {
-			s.forward(up, w, r)
+			s.forward(up, w, r, false)
 			return
 		}
 	}
 	http.Error(w, "pikopod: no upstream matches "+r.URL.Path+" — check upstreams in pikopod.yaml", http.StatusNotFound)
 }
 
-func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Request) {
-	s.Metrics.RequestsProxied.Add(1)
+func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Request, inbound bool) {
+	if inbound {
+		s.Metrics.WebhooksReceived.Add(1)
+	} else {
+		s.Metrics.RequestsProxied.Add(1)
+	}
+	dropped := func() {
+		if inbound {
+			s.Metrics.WebhooksDropped.Add(1)
+		} else {
+			s.Metrics.CapturesDropped.Add(1)
+		}
+	}
 	start := time.Now()
 
 	var reqBuf cappedBuffer
@@ -196,10 +242,15 @@ func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Reque
 				s.Metrics.ObserverPanics.Add(1)
 			}
 		}()
+		path := strings.TrimPrefix(r.URL.Path, up.prefix) + querysuffix(r.URL)
+		if inbound {
+			path = up.prefix + querysuffix(r.URL)
+		}
 		ex := &Exchange{
 			Upstream:   up.name,
 			Method:     r.Method,
-			Path:       strings.TrimPrefix(r.URL.Path, up.prefix) + querysuffix(r.URL),
+			Path:       path,
+			Inbound:    inbound,
 			Status:     rec.status,
 			ReqHeader:  r.Header.Clone(),
 			RespHeader: rec.Header().Clone(),
@@ -212,7 +263,7 @@ func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Reque
 
 		size := int64(len(ex.ReqBody) + len(ex.RespBody))
 		if s.queuedBytes.Load()+size > maxCaptureBytes {
-			s.Metrics.CapturesDropped.Add(1)
+			dropped()
 			return
 		}
 		s.queuedBytes.Add(size)
@@ -221,7 +272,7 @@ func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Reque
 		defer s.closeMu.RUnlock()
 		if s.closed {
 			ex.Release()
-			s.Metrics.CapturesDropped.Add(1)
+			dropped()
 			return
 		}
 		select {
@@ -232,7 +283,7 @@ func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Reque
 			select {
 			case evicted := <-s.captures:
 				evicted.Release()
-				s.Metrics.CapturesDropped.Add(1)
+				dropped()
 			default:
 			}
 			select {
@@ -240,7 +291,7 @@ func (s *Server) forward(up *upstreamProxy, w http.ResponseWriter, r *http.Reque
 				s.Metrics.CapturesQueued.Add(1)
 			default:
 				ex.Release()
-				s.Metrics.CapturesDropped.Add(1)
+				dropped()
 			}
 		}
 	}()

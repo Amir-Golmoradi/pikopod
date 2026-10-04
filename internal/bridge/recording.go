@@ -26,6 +26,12 @@ func FindRecording(dataDir string, ev *alert.DriftEvent) (*proxy.Record, error) 
 	}
 	defer f.Close()
 
+	if ev.Kind.IsWebhook() {
+		return nil, errfmt.New("a webhook incident is rehearsed, not reproduced",
+			string(ev.Kind)+" describes how the provider delivered webhooks, not a request the sandbox can answer",
+			"run `pikopod scenario check "+ev.Upstream+" duplicate_delivery`, or arm `pikopod chaos "+ev.Upstream+" --kind reorder_webhook`",
+			"docs/exit-codes.md")
+	}
 	want, err := strconv.Atoi(ev.After)
 	if err != nil {
 		return nil, errUnreproducible(ev, "the event carries no concrete status to reproduce")

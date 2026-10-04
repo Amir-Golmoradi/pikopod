@@ -121,6 +121,7 @@ upstreams:
 |---|---|
 | `client_errors` | Capture 4xx as incidents. Off by default. |
 | `client_error_rate` | Share of requests to one endpoint family that must be 4xx before one is reported. Default `0.05`. |
+| `webhooks.receiver` | Absolute URL of your webhook handler. The agent serves `/hooks/<name>` without a token, forwards every delivery there untouched, records it redacted to `recordings/<name>.webhooks.ndjson`, and reports `webhook_duplicate` and `webhook_out_of_order` incidents. Absent means no tap. |
 
 **Why 4xx is opt-in.** A 4xx is usually the caller's own bug, which is exactly
 why an integration tool should be able to catch it — but an endpoint where a 401

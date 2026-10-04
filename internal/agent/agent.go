@@ -24,6 +24,7 @@ import (
 	"github.com/pikopod/pikopod/internal/specwatch"
 	"github.com/pikopod/pikopod/internal/store"
 	"github.com/pikopod/pikopod/internal/volatile"
+	"github.com/pikopod/pikopod/internal/webhooktap"
 )
 
 type Agent struct {
@@ -56,6 +57,8 @@ type Agent struct {
 	documented map[string]*documentedCache
 
 	forks forkCache
+
+	webhooks map[string]*webhookState
 
 	EventsEmitted          atomic.Int64
 	DivergenceChecked      atomic.Int64
@@ -121,6 +124,7 @@ func New(cfg *config.Config, alertOpts alert.Options, extraSinks ...alert.Sink) 
 	}
 	rec := proxy.NewRecorder(cfg.DataDir, tok, metrics)
 	rec.SetObserver(a.observe)
+	rec.SetDeliveryExtractor(webhooktap.New(nil).Extract)
 	rec.SetSampling(cfg.SampleRate())
 	rec.SetRetention(cfg.RetentionTTL())
 	a.Recorder = rec
@@ -237,6 +241,10 @@ func (a *Agent) observe(rec *proxy.Record) (notable bool) {
 			a.Metrics.ObserverPanics.Add(1)
 		}
 	}()
+
+	if rec.Inbound {
+		return a.observeDelivery(rec)
+	}
 
 	if a.Cfg.Refine.Enabled {
 		a.refiner(rec.Upstream).Observe(rec)
@@ -495,6 +503,8 @@ func (a *Agent) healthz(w http.ResponseWriter, r *http.Request) {
 		"divergence_checked":      a.DivergenceChecked.Load(),
 		"divergence_unverifiable": a.DivergenceUnverifiable.Load(),
 		"divergence_skipped":      a.DivergenceSkipped.Load(),
+		"webhooks_received":       a.Metrics.WebhooksReceived.Load(),
+		"webhooks_dropped":        a.Metrics.WebhooksDropped.Load(),
 		"alerts_sent":             alertsSent,
 		"last_delivery_ok":        deliveryOK,
 		"last_delivery_err":       deliveryErr,

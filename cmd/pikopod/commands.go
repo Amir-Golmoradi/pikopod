@@ -154,6 +154,13 @@ func newUpCmd() *cobra.Command {
 				}
 				fmt.Fprintf(out2(cmd), "spec-declared enums: %d field(s) across %d upstream(s) keep their declared values readable on disk\n", fields, len(rules))
 			}
+			envelopes := map[string]*ir.WebhookEnvelope{}
+			for name, def := range contracts {
+				if def.WebhookEnvelope != nil {
+					envelopes[name] = def.WebhookEnvelope
+				}
+			}
+			a.SetEnvelopes(envelopes)
 			if cfg.Refine.Enabled {
 				a.SetContracts(contracts)
 				fmt.Fprintf(out2(cmd), "contract refinement ON: traffic refines %d linked contract(s)\n", len(contracts))

@@ -35,17 +35,23 @@ const (
 	RateLimited Kind = "rate_limited"
 
 	ClientError Kind = "client_error"
+
+	WebhookDuplicate Kind = "webhook_duplicate"
+
+	WebhookOutOfOrder Kind = "webhook_out_of_order"
 )
 
 const BehaviourDivergence Kind = "behaviour_divergence"
 
 func (k Kind) IsIncident() bool {
 	switch k {
-	case UpstreamError, UpstreamUnreachable, RateLimited, ClientError:
+	case UpstreamError, UpstreamUnreachable, RateLimited, ClientError, WebhookDuplicate, WebhookOutOfOrder:
 		return true
 	}
 	return false
 }
+
+func (k Kind) IsWebhook() bool { return k == WebhookDuplicate || k == WebhookOutOfOrder }
 
 func (k Kind) IsDivergence() bool { return k == BehaviourDivergence }
 

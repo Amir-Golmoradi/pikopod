@@ -13,6 +13,7 @@ import (
 
 	"github.com/pikopod/pikopod/internal/alert"
 	"github.com/pikopod/pikopod/internal/bridge"
+	"github.com/pikopod/pikopod/internal/drift"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/spf13/cobra"
 )
@@ -188,6 +189,14 @@ func renderIncidents(w io.Writer, evs []alert.DriftEvent, total int, truncated b
 			ev.Occurrences, ev.LastSeen.Format(time.RFC3339), ev.Fingerprint)
 		if ev.Kind.IsDivergence() {
 			fmt.Fprintf(w, "  %s: %s\n", ev.Category, ev.Detail)
+		}
+		if ev.Kind.IsWebhook() {
+			if ev.Kind == drift.WebhookOutOfOrder {
+				fmt.Fprintf(w, "  rehearse: pikopod chaos %s --kind reorder_webhook\n", ev.Upstream)
+			} else {
+				fmt.Fprintf(w, "  rehearse: pikopod scenario check %s duplicate_delivery\n", ev.Upstream)
+			}
+			continue
 		}
 		if ev.Kind.IsIncident() || ev.Kind.IsDivergence() {
 			if until := bridge.ExpiresAt(&ev, retention); until != nil {
