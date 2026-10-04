@@ -1,12 +1,13 @@
 package main
 
 import (
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,16 @@ type forkSet struct {
 	forks map[string]*forkInfo
 	once  sync.Once
 	stop  chan struct{}
+	seq   int
+}
+
+func (s *sandboxServer) registryName(name string) string {
+	s.forks.mu.Lock()
+	defer s.forks.mu.Unlock()
+	if f, ok := s.forks.forks[name]; ok {
+		return f.parent
+	}
+	return name
 }
 
 func (s *sandboxServer) touchFork(name string) {
@@ -57,9 +68,12 @@ func (s *sandboxServer) newFork(parent string) (map[string]any, error) {
 	if !ok {
 		return nil, nil
 	}
-	var b [4]byte
-	rand.Read(b[:])
-	token := hex.EncodeToString(b[:])
+	s.forks.mu.Lock()
+	s.forks.seq++
+	seq := s.forks.seq
+	s.forks.mu.Unlock()
+	sum := sha256.Sum256([]byte(entry.Seed + "|fork|" + strconv.Itoa(seq)))
+	token := hex.EncodeToString(sum[:4])
 	name := parent + "--" + token
 	eng, err := s.buildEngine(entry, entry.ID+"--"+token, "/"+name)
 	if err != nil {

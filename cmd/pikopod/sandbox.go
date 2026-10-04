@@ -769,6 +769,10 @@ func (s *sandboxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) >= 2 && parts[1] == "v1" {
+		parts = append(parts[:1], parts[2:]...)
+	}
+	w.Header().Set("x-pikopod-api", "v1")
 
 	dayZero := len(parts) == 4 && (parts[3] == "seed" || parts[3] == "snapshot" || parts[3] == "restore" || parts[3] == "reset" || parts[3] == "fork" || parts[3] == "forks")
 	admin := dayZero || len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks" || parts[3] == "rules")

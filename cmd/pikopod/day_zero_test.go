@@ -171,6 +171,23 @@ func TestControlPlaneForksAreIsolatedDeterministicAndReaped(t *testing.T) {
 	if resp, _ := http.Get(srv.URL + "/widgets/widgets/widgets_1"); resp.StatusCode != 404 {
 		t.Fatalf("a create in a fork never reaches the parent: %d", resp.StatusCode)
 	}
+	forkBase := srv.URL + "/_pikopod/v1/sandboxes/" + forks[0]
+	if code, out := adminPost(t, forkBase+"/mode", `{"name":"retry_storm"}`); code != 201 {
+		t.Fatalf("a fork enters a mode like its parent: %d %v", code, out)
+	}
+	for i := 0; i < 3; i++ {
+		req, _ := http.NewRequest("POST", srv.URL+"/"+forks[0]+"/widgets", strings.NewReader(`{"name":"retry"}`))
+		req.Header.Set("content-type", "application/json")
+		req.Header.Set("idempotency-key", "k-1")
+		resp, _ := http.DefaultClient.Do(req)
+		resp.Body.Close()
+	}
+	if code, out := adminPost(t, forkBase+"/mode/verify", ""); code != 200 || out["result"].(map[string]any)["status"] != "PASSED" {
+		t.Fatalf("a fork verifies with its parent's seed: %d %v", code, out)
+	}
+	if code, _ := adminPost(t, base+"/mode/verify", ""); code != 409 {
+		t.Fatalf("the parent has no mode of its own: %d", code)
+	}
 	if resp, _ := http.Get(base + "/forks"); resp.StatusCode != 200 {
 		t.Fatalf("forks list: %d", resp.StatusCode)
 	}
