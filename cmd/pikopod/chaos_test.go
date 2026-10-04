@@ -218,3 +218,31 @@ func armedFault(t *testing.T, admin, body string) {
 		t.Fatalf("arming should 201, got %d", resp.StatusCode)
 	}
 }
+
+func TestChaosClearSaysHowManyInWords(t *testing.T) {
+	srv := modeServer(t, "chaos-clear-1")
+	admin := srv.URL + "/_pikopod/sandboxes/widgets/faults"
+	for _, body := range []string{
+		`{"method":"POST","path":"/widgets","kind":"error","status":503}`,
+		`{"method":"GET","path":"/widgets","kind":"error","status":500}`,
+	} {
+		res, err := http.Post(admin, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+	}
+	req, _ := http.NewRequest(http.MethodDelete, admin, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var buf bytes.Buffer
+	if err := printCleared(resp, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != "cleared 2 fault(s)\n" {
+		t.Fatalf("clear must say how many in words, got %q", got)
+	}
+}
