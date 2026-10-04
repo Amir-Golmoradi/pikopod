@@ -186,6 +186,15 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+func Ephemeral(dataDir string) (*Config, error) {
+	c := &Config{DataDir: dataDir, Upstreams: map[string]Upstream{}}
+	if err := c.finish(); err != nil {
+		return nil, err
+	}
+	c.DataDir = dataDir
+	return c, nil
+}
+
 func (c *Config) finish() error {
 	if v := os.Getenv("PIKOPOD_LISTEN"); v != "" {
 		c.Listen = v

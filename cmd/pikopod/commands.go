@@ -122,6 +122,15 @@ func newImportCmd() *cobra.Command {
 func newUpCmd() *cobra.Command {
 	c := &cobra.Command{Use: "up", Short: "Serve the observing agent (:4700) and registered sandboxes (:4600)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if spec, _ := cmd.Flags().GetString("spec"); spec != "" {
+				ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+				defer stop()
+				name, _ := cmd.Flags().GetString("name")
+				seed, _ := cmd.Flags().GetString("seed")
+				seedData, _ := cmd.Flags().GetString("seed-data")
+				port, _ := cmd.Flags().GetInt("port")
+				return upSpec(ctx, upSpecOptions{Spec: spec, Name: name, Seed: seed, SeedData: seedData, Port: port}, cmd.OutOrStdout())
+			}
 			cfg, err := loadConfig(cmd)
 			if err != nil {
 				return err
@@ -220,6 +229,11 @@ func newUpCmd() *cobra.Command {
 			return a.Run(ctx)
 		}}
 	c.Flags().Bool("wallclock-faults", false, "every armed fault delays/hangs on the REAL wire (default: virtualized, instant)")
+	c.Flags().String("spec", "", "serve one sandbox from this spec with no config file and a temporary data dir (no agent)")
+	c.Flags().String("name", "", "sandbox name with --spec (default: the spec's file name)")
+	c.Flags().String("seed", "", "sandbox seed with --spec (default: random)")
+	c.Flags().String("seed-data", "", "YAML or JSON file of resources to store before the first request, with --spec")
+	c.Flags().Int("port", 0, "sandbox port with --spec (default: 4600)")
 	return c
 }
 
@@ -280,7 +294,7 @@ func contractsForUpstreams(cfg *config.Config) (map[string]*ir.ApiDefinition, er
 
 func newSandboxCmd() *cobra.Command {
 	c := &cobra.Command{Use: "sandbox", Short: "Manage provider sandboxes (add, list, reset, webhooks)"}
-	c.AddCommand(newSandboxAddCmd(), newSandboxListCmd(), newSandboxResetCmd(), newSandboxWebhooksCmd(),
+	c.AddCommand(newSandboxAddCmd(), newSandboxListCmd(), newSandboxResetCmd(), newSandboxSeedCmd(), newSandboxWebhooksCmd(),
 		oldSpelling(newSandboxRequestsCmd(), "pikopod sandbox requests", "pikopod requests"))
 	return c
 }
