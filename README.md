@@ -211,9 +211,16 @@ ERR  GET    /charges/{id}                            endpoint-removed
 breaking declared drift at/above ERR — failing the gate (exit 1)
 ```
 
-Exit `0` clean, `1` breaking, `2` tool error. Add `--format githubactions` and
-every finding lands inline on the pull request diff. See
-[Spec diff](https://docs.pikopod.com/gate/spec-diff) and
+Exit `0` clean, `1` breaking, `2` tool error. In GitHub Actions it is two
+lines, with the release verified by cosign before it runs and every finding
+inline on the pull request diff:
+
+```yaml
+- uses: Pikopod/spec-diff-action@v1
+  with: { old: "git:origin/main:openapi.yaml", new: openapi.yaml }
+```
+
+See [Spec diff](https://docs.pikopod.com/gate/spec-diff) and
 [CI integration](https://docs.pikopod.com/gate/ci-integration).
 
 ## It cannot slow your traffic down
