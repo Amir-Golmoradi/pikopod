@@ -37,7 +37,7 @@ func modeReq(cfg *config.Config, method, sandboxName string, body any) (*http.Re
 }
 
 func adminReq(cfg *config.Config, method, sandboxName, subpath string, body any) (*http.Response, error) {
-	base := fmt.Sprintf("%s://%s/_pikopod/sandboxes/%s/%s", cfg.Scheme(),
+	base := fmt.Sprintf("%s://%s/_pikopod/v1/sandboxes/%s/%s", cfg.Scheme(),
 		net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName), subpath)
 	var reader io.Reader
 	if body != nil {

@@ -118,7 +118,7 @@ func seedOffline(cfg *config.Config, entry *sandboxEntry, items map[string][]map
 }
 
 func controlPlanePost(cfg *config.Config, name, action string, body []byte) (bool, int, map[string]any, error) {
-	url := fmt.Sprintf("%s://%s:%d/_pikopod/sandboxes/%s/%s", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, name, action)
+	url := fmt.Sprintf("%s://%s:%d/_pikopod/v1/sandboxes/%s/%s", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, name, action)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return false, 0, nil, err

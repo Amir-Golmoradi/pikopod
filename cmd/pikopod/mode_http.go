@@ -30,7 +30,7 @@ func (s *sandboxServer) serveMode(w http.ResponseWriter, r *http.Request, name s
 			writeSandboxJSONError(w, http.StatusBadRequest, "body must be {\"name\": \"<archetype or pack>\"}")
 			return
 		}
-		_, def, err := loadSandboxDef(s.cfg, name)
+		_, def, err := loadSandboxDef(s.cfg, s.registryName(name))
 		if err != nil {
 			writeSandboxJSONError(w, http.StatusNotFound, "unknown sandbox "+name)
 			return
@@ -95,7 +95,7 @@ func (s *sandboxServer) serveModeVerify(w http.ResponseWriter, r *http.Request, 
 		writeSandboxJSONError(w, http.StatusConflict, "no mode set on "+name+": enter one with `pikopod mode set "+name+" <scenario>`, run your tests, then verify")
 		return
 	}
-	entry, _, err := loadSandboxDef(s.cfg, name)
+	entry, _, err := loadSandboxDef(s.cfg, s.registryName(name))
 	if err != nil {
 		writeSandboxJSONError(w, http.StatusNotFound, "unknown sandbox "+name)
 		return

@@ -19,7 +19,7 @@ import (
 )
 
 func chaosClientReq(cfg *config.Config, method, sandboxName string, query url.Values, body any) (*http.Response, error) {
-	base := fmt.Sprintf("%s://%s/_pikopod/sandboxes/%s/faults", cfg.Scheme(), net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName))
+	base := fmt.Sprintf("%s://%s/_pikopod/v1/sandboxes/%s/faults", cfg.Scheme(), net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName))
 	if len(query) > 0 {
 		base += "?" + query.Encode()
 	}
