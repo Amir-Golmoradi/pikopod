@@ -63,6 +63,7 @@ func rulePromote(cfg *config.Config, fp string, yes bool, in io.Reader, out io.W
 		return err
 	}
 	rule, skipped := promotedRule(ev, rec)
+	rule.When.Path = declaredTemplate(def, ev.Method, rec.Path, ev.Endpoint)
 	if len(rule.When.Body) == 0 {
 		return errfmt.New("nothing in the request survived redaction to condition on",
 			"every feature the divergence named was dropped before disk, so the rule would answer every "+ev.Method+" "+ev.Endpoint,
@@ -125,10 +126,14 @@ func ask(in io.Reader, out io.Writer, question string) bool {
 }
 
 func promotedRule(ev *alert.DriftEvent, rec *proxy.Record) (sandbox.Rule, []string) {
+	return ruleFromRecording("promoted-"+strings.TrimPrefix(ev.Fingerprint, "fp_"), "promoted:"+ev.Fingerprint, ev.Method, ev.Endpoint, rec, strings.Split(ev.Field, ","))
+}
+
+func ruleFromRecording(id, provenance, method, template string, rec *proxy.Record, features []string) (sandbox.Rule, []string) {
 	rule := sandbox.Rule{
-		ID:         "promoted-" + strings.TrimPrefix(ev.Fingerprint, "fp_"),
-		Provenance: "promoted:" + ev.Fingerprint,
-		When:       sandbox.RuleWhen{Method: ev.Method, Path: ev.Endpoint, Body: map[string]json.RawMessage{}},
+		ID:         id,
+		Provenance: provenance,
+		When:       sandbox.RuleWhen{Method: method, Path: template, Body: map[string]json.RawMessage{}},
 		Respond:    sandbox.RuleRespond{Status: rec.Status},
 	}
 	if rec.RespKind == "json" && rec.RespBody != nil {
@@ -144,7 +149,6 @@ func promotedRule(ev *alert.DriftEvent, rec *proxy.Record) (sandbox.Rule, []stri
 		}
 	}
 	var skipped []string
-	features := strings.Split(ev.Field, ",")
 	sort.Strings(features)
 	for _, f := range features {
 		f = strings.TrimSpace(f)

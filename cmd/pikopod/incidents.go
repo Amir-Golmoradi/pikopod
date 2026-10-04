@@ -86,7 +86,7 @@ func newIncidentsCmd() *cobra.Command {
 			}
 			return renderIncidents(cmd.OutOrStdout(), kept, total, truncated, format, cfg.RetentionTTL())
 		}}
-	c.AddCommand(newIncidentsExportCmd())
+	c.AddCommand(newIncidentsExportCmd(), newIncidentsImportCmd())
 	c.Flags().Duration("since", 0, "only events last seen within this window, e.g. 24h")
 	c.Flags().String("kind", "", "filter by kind, e.g. upstream_error")
 	c.Flags().String("upstream", "", "filter by upstream")

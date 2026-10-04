@@ -65,7 +65,7 @@ after the origin host's retention has aged the incident out.`,
 			if err != nil {
 				return err
 			}
-			eng, done, err := scenarioEngine(cfg, entry, def, false, pinVersion)
+			eng, done, err := scenarioEngineFrom(cfg, entry, def, false, true, pinVersion)
 			if err != nil {
 				return err
 			}
