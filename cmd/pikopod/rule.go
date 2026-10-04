@@ -149,7 +149,7 @@ When ` + "`pikopod up`" + ` is serving the sandbox, add and drop apply to it at 
 			return nil
 		}}
 
-	c.AddCommand(list, add, drop, check)
+	c.AddCommand(list, add, drop, check, newRulePromoteCmd())
 	return c
 }
 
