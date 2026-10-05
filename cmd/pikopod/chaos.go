@@ -19,7 +19,7 @@ import (
 )
 
 func chaosClientReq(cfg *config.Config, method, sandboxName string, query url.Values, body any) (*http.Response, error) {
-	base := fmt.Sprintf("%s://%s/_pikopod/sandboxes/%s/faults", cfg.Scheme(), net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName))
+	base := fmt.Sprintf("%s://%s/_pikopod/v1/sandboxes/%s/faults", cfg.Scheme(), net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName))
 	if len(query) > 0 {
 		base += "?" + query.Encode()
 	}
@@ -62,7 +62,7 @@ func newChaosCmd() *cobra.Command {
 					return err
 				}
 				defer resp.Body.Close()
-				return chaosRelay(resp, out, "standing faults")
+				return chaosList(resp, out)
 			}
 
 			method, _ := cmd.Flags().GetString("method")
@@ -81,7 +81,7 @@ func newChaosCmd() *cobra.Command {
 					return err
 				}
 				defer resp.Body.Close()
-				return chaosRelay(resp, out, "cleared")
+				return printCleared(resp, out)
 			}
 
 			kind, _ := cmd.Flags().GetString("kind")
@@ -158,6 +158,47 @@ func chaosRelay(resp *http.Response, out io.Writer, verb string) error {
 		return errfmt.New("the sandbox server refused", fmt.Sprintf("%d: %s", resp.StatusCode, bytes.TrimSpace(raw)), "check the sandbox name (`pikopod sandbox list`) and flags", "")
 	}
 	fmt.Fprintf(out, "%s: %s\n", verb, bytes.TrimSpace(raw))
+	return nil
+}
+
+func chaosList(resp *http.Response, out io.Writer) error {
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return errfmt.New("the sandbox server refused", fmt.Sprintf("%d: %s", resp.StatusCode, bytes.TrimSpace(raw)), "check the sandbox name (`pikopod sandbox list`) and flags", "")
+	}
+	var list struct {
+		Faults []sandbox.FaultRule `json:"faults"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return errfmt.Newf("the sandbox server answered with something unreadable", "check that `pikopod up` from this same pikopod build is what is listening on the sandbox port", "docs/config-reference.md#ports", "%v", err)
+	}
+	if len(list.Faults) == 0 {
+		fmt.Fprintln(out, "no standing faults")
+		return nil
+	}
+	for i := range list.Faults {
+		fmt.Fprintf(out, "armed   %s\n", list.Faults[i].Describe())
+	}
+	return nil
+}
+
+func printCleared(resp *http.Response, out io.Writer) error {
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return errfmt.New("the sandbox server refused", fmt.Sprintf("%d: %s", resp.StatusCode, bytes.TrimSpace(raw)), "check the sandbox name (`pikopod sandbox list`) and flags", "")
+	}
+
+	var body struct {
+		Cleared int `json:"cleared"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return errfmt.Newf("the sandbox server sent an unreadable reply",
+			"make sure the server is running the same pikopod version as this CLI (`pikopod version`), and that nothing else is listening on its address",
+			"",
+			"expected {\"cleared\": N}, got %q", bytes.TrimSpace(raw))
+	}
+
+	fmt.Fprintf(out, "cleared %d fault(s)\n", body.Cleared)
 	return nil
 }
 

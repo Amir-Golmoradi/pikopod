@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pikopod/pikopod/internal/alert"
 	"github.com/pikopod/pikopod/internal/baseline"
 	"github.com/pikopod/pikopod/internal/drift"
 	"github.com/pikopod/pikopod/internal/errfmt"
@@ -24,7 +25,7 @@ import (
 type Recording struct {
 	Record proxy.Record
 
-	served bool
+	served map[string]bool
 }
 
 type MatchTier string
@@ -147,6 +148,10 @@ func allowed(recs []*Recording, tier MatchTier, allow func(*proxy.Record, MatchT
 }
 
 func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy.Record, MatchTier) bool) (*proxy.Record, MatchDiag) {
+	return s.MatchValueScoped("", method, path, parsed, allow)
+}
+
+func (s *Set) MatchValueScoped(scope, method, path string, parsed any, allow func(*proxy.Record, MatchTier) bool) (*proxy.Record, MatchDiag) {
 
 	exactK := s.exactKey(method, path, parsed)
 	shapeK := s.shapeKey(method, path, parsed)
@@ -158,7 +163,7 @@ func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy
 	if recs := allowed(s.exact[exactK], TierExact, allow); len(recs) > 0 {
 
 		diag := MatchDiag{Tier: TierExact, SeqLen: len(recs)}
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r == nil {
 			r = recs[len(recs)-1]
 			diag.SeqPos, diag.Held = len(recs), true
@@ -174,17 +179,16 @@ func (s *Set) MatchValueWhere(method, path string, parsed any, allow func(*proxy
 		return &r.Record, diag
 	}
 	if recs := allowed(s.shape[shapeK], TierShape, allow); len(recs) > 0 {
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r != nil {
 			s.reportLocked(ReportLine{method, path, TierShape})
 			return &r.Record, MatchDiag{Tier: TierShape, MissedOn: s.valueGap(parsed, r.Record.ReqBody)}
 		}
 	}
 	if recs := allowed(s.sequence[seqK], TierSequence, allow); len(recs) > 0 {
-		r := takeUnserved(recs)
+		r := takeUnserved(recs, scope)
 		if r == nil {
-
-			recs[0].served = false
+			delete(recs[0].served, scope)
 			r = recs[0]
 		}
 		s.reportLocked(ReportLine{method, path, TierSequence})
@@ -300,14 +304,27 @@ func absInt(n int) int {
 	return n
 }
 
-func takeUnserved(recs []*Recording) *Recording {
+func takeUnserved(recs []*Recording, scope string) *Recording {
 	for _, r := range recs {
-		if !r.served {
-			r.served = true
+		if !r.served[scope] {
+			if r.served == nil {
+				r.served = map[string]bool{}
+			}
+			r.served[scope] = true
 			return r
 		}
 	}
 	return nil
+}
+
+func (s *Set) ForgetScope(scope string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, recs := range s.sequence {
+		for _, r := range recs {
+			delete(r.served, scope)
+		}
+	}
 }
 
 func (s *Set) exactKey(method, path string, body any) string {
@@ -357,19 +374,43 @@ func (s *Set) stripVolatile(node any, path string) any {
 
 type GateResult struct {
 	Findings []GateFinding `json:"findings"`
+	Accepted []GateFinding `json:"accepted"`
+	FailOn   string        `json:"fail_on"`
 	Records  int           `json:"records"`
 	Skipped  int           `json:"skipped_unwarmed"`
 }
 
 type GateFinding struct {
-	Method   string `json:"method"`
-	Template string `json:"template"`
-	Kind     string `json:"kind"`
-	Field    string `json:"field,omitempty"`
-	Detail   string `json:"detail,omitempty"`
+	Method      string `json:"method"`
+	Template    string `json:"template"`
+	Kind        string `json:"kind"`
+	Field       string `json:"field,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+	Risk        string `json:"risk"`
+	Fingerprint string `json:"fingerprint"`
+	Documented  bool   `json:"documented,omitempty"`
+	Because     string `json:"because,omitempty"`
 }
 
+type GateOptions struct {
+	FailOn   drift.Risk
+	Accepted map[string]bool
+	Annotate func([]drift.Finding)
+}
+
+const AcceptedFingerprint = "fingerprint accepted"
+
 func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error) {
+	return GateWith(dataDir, upstream, volatileFields, GateOptions{})
+}
+
+func GateWith(dataDir, upstream string, volatileFields []string, opts GateOptions) (*GateResult, error) {
+	if opts.FailOn == "" {
+		opts.FailOn = drift.RiskMedium
+	}
+	if opts.Accepted == nil {
+		opts.Accepted = alert.AckedFingerprints(dataDir)
+	}
 	m, _, err := volatile.Compile(volatileFields)
 	if err != nil {
 		return nil, err
@@ -383,7 +424,7 @@ func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error
 	if err != nil {
 		return nil, errfmt.Newf("no recordings for "+upstream, "send traffic through the agent first", "docs/config-reference.md#data_dir", "%v", err)
 	}
-	res := &GateResult{}
+	res := &GateResult{FailOn: string(opts.FailOn)}
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -402,25 +443,55 @@ func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error
 		if rec.RespKind != "json" {
 			continue
 		}
-		for _, f := range drift.DiffRecord(fam, rec.Status, rec.RespBody) {
-			if _, drop := m.Match(f.Field); drop && f.Kind == string(drift.EnumValueNew) {
+		findings := drift.DiffRecordFindings(upstream, fam, rec.Status, rec.RespBody)
+		if opts.Annotate != nil {
+			opts.Annotate(findings)
+		}
+		for _, f := range findings {
+			if _, drop := m.Match(f.Field); drop && f.Kind == drift.EnumValueNew {
 				continue
 			}
-			res.Findings = append(res.Findings, GateFinding{Method: rec.Method, Template: template, Kind: f.Kind, Field: f.Field, Detail: f.Detail})
+			gf := GateFinding{Method: rec.Method, Template: template, Kind: string(f.Kind), Field: f.Field, Detail: f.Detail(), Risk: string(f.Risk()), Fingerprint: f.Fingerprint(), Documented: f.Documented}
+			switch {
+			case opts.Accepted[gf.Fingerprint]:
+				gf.Because = AcceptedFingerprint
+				res.Accepted = append(res.Accepted, gf)
+			case f.Risk().Rank() < opts.FailOn.Rank():
+				gf.Because = "below --fail-on " + string(opts.FailOn)
+				res.Accepted = append(res.Accepted, gf)
+			default:
+				res.Findings = append(res.Findings, gf)
+			}
 		}
 	}
+	res.Findings = dedupeFindings(res.Findings)
+	res.Accepted = dedupeFindings(res.Accepted)
+	sortByRisk(res.Findings)
+	sortByRisk(res.Accepted)
+	return res, nil
+}
 
+func sortByRisk(fs []GateFinding) {
+	sort.SliceStable(fs, func(i, j int) bool {
+		ri, rj := drift.Risk(fs[i].Risk).Rank(), drift.Risk(fs[j].Risk).Rank()
+		if ri != rj {
+			return ri > rj
+		}
+		return fs[i].Method+fs[i].Template+fs[i].Field < fs[j].Method+fs[j].Template+fs[j].Field
+	})
+}
+
+func dedupeFindings(in []GateFinding) []GateFinding {
 	seen := map[string]bool{}
-	uniq := res.Findings[:0]
-	for _, f := range res.Findings {
+	out := in[:0]
+	for _, f := range in {
 		k := f.Method + "|" + f.Template + "|" + f.Kind + "|" + f.Field + "|" + f.Detail
 		if !seen[k] {
 			seen[k] = true
-			uniq = append(uniq, f)
+			out = append(out, f)
 		}
 	}
-	res.Findings = uniq
-	return res, nil
+	return out
 }
 
 func parseBody(body []byte) any {

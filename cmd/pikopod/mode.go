@@ -37,7 +37,7 @@ func modeReq(cfg *config.Config, method, sandboxName string, body any) (*http.Re
 }
 
 func adminReq(cfg *config.Config, method, sandboxName, subpath string, body any) (*http.Response, error) {
-	base := fmt.Sprintf("%s://%s/_pikopod/sandboxes/%s/%s", cfg.Scheme(),
+	base := fmt.Sprintf("%s://%s/_pikopod/v1/sandboxes/%s/%s", cfg.Scheme(),
 		net.JoinHostPort(cfg.Listen, fmt.Sprint(cfg.SandboxPort)), url.PathEscape(sandboxName), subpath)
 	var reader io.Reader
 	if body != nil {
@@ -92,10 +92,11 @@ your application is never in the loop. A mode is the other half: it arms the
 scenario's standing conditions on the sandbox ` + "`pikopod up`" + ` is serving, and then
 your own tests, your own app, or plain curl meet the failure.
 
-A mode is GLOBAL to the sandbox and stays until cleared. Two test suites running
-against one sandbox will see each other's faults, and a fault with a ` + "`times`" + `
-window counts down across both. Run one suite at a time against a given sandbox,
-or give each its own ` + "`pikopod up`" + ` on a different port.
+A mode is set on the sandbox and stays until cleared. Fault windows, the request
+journal and the recordings cursor are partitioned by the ` + "`X-Pikopod-Scope`" + `
+request header: tests that send a scope each get their own ` + "`times`" + ` window and
+their own journal, and ` + "`mode verify --scope <token>`" + ` judges one partition.
+Requests without the header share the unscoped partition.
 
 The control plane that serves this listens on the sandbox port and is
 unauthenticated on loopback, like the rest of ` + "`/_pikopod/`" + `. It controls a fake,
@@ -161,9 +162,8 @@ never a provider. Binding a non-loopback address requires a token.`}
 				return err
 			}
 			defer resp.Body.Close()
-			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			fmt.Fprintf(cmd.OutOrStdout(), "cleared: %s\n", bytes.TrimSpace(raw))
-			return nil
+
+			return printCleared(resp, cmd.OutOrStdout())
 		}}
 
 	verify := &cobra.Command{Use: "verify <sandbox>", Short: "Check what your tests sent against the standing scenario's verification steps (exit 0 pass / 1 fail / 2 error)", Args: cobra.ExactArgs(1),
@@ -172,7 +172,12 @@ never a provider. Binding a non-loopback address requires a token.`}
 			if err != nil {
 				return err
 			}
-			resp, err := adminReq(cfg, http.MethodPost, args[0], "mode/verify", nil)
+			scope, _ := cmd.Flags().GetString("scope")
+			subpath := "mode/verify"
+			if scope != "" {
+				subpath += "?scope=" + url.QueryEscape(scope)
+			}
+			resp, err := adminReq(cfg, http.MethodPost, args[0], subpath, nil)
 			if err != nil {
 				return err
 			}
@@ -200,6 +205,9 @@ never a provider. Binding a non-loopback address requires a token.`}
 				return errfmt.Newf("the sandbox answered strangely", "retry", "", "%v", err)
 			}
 			out := cmd.OutOrStdout()
+			if scope != "" {
+				fmt.Fprintf(out, "scope %q: judging only the requests sent with X-Pikopod-Scope: %s\n", scope, scope)
+			}
 			writeRunResult(out, body.Mode, &body.Result)
 			switch body.Result.Status {
 			case scenario.RunErrored:
@@ -211,6 +219,7 @@ never a provider. Binding a non-loopback address requires a token.`}
 			return nil
 		}}
 
+	verify.Flags().String("scope", "", "judge only the requests sent with this X-Pikopod-Scope header")
 	c.AddCommand(set, show, clear, verify)
 	return c
 }

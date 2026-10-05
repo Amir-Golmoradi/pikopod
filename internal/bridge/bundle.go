@@ -1,10 +1,12 @@
 package bridge
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,6 +35,14 @@ type Bundle struct {
 	Event           alert.DriftEvent `json:"event"`
 	Recording       proxy.Record     `json:"recording"`
 	ContractVersion int              `json:"contract_version"`
+	State           *BundleState     `json:"state,omitempty"`
+}
+
+type BundleState struct {
+	Type       string          `json:"type"`
+	Key        string          `json:"key"`
+	Attributes json.RawMessage `json:"attributes"`
+	State      *string         `json:"state,omitempty"`
 }
 
 func ExpiresAt(ev *alert.DriftEvent, retention time.Duration) *time.Time {
@@ -60,7 +70,75 @@ func Export(dataDir string, ev *alert.DriftEvent, retention time.Duration, host 
 		Event:           *ev,
 		Recording:       *rec,
 		ContractVersion: version,
+		State:           captureState(dataDir, ev, rec),
 	}, nil
+}
+
+func ResourceOf(template, path string) (typ, key string, ok bool) {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	ts := strings.Split(strings.Trim(template, "/"), "/")
+	ps := strings.Split(strings.Trim(path, "/"), "/")
+	if len(ts) < 2 || len(ts) != len(ps) || !strings.Contains(ts[len(ts)-1], "{") {
+		return "", "", false
+	}
+	return "/" + strings.Join(ts[:len(ts)-1], "/"), ps[len(ps)-1], true
+}
+
+func captureState(dataDir string, ev *alert.DriftEvent, rec *proxy.Record) *BundleState {
+	typ, key, ok := ResourceOf(ev.Endpoint, rec.Path)
+	if !ok {
+		return nil
+	}
+	var best *proxy.Record
+	consider := func(r *proxy.Record) {
+		if r.Status < 200 || r.Status >= 300 || r.RespKind != "json" {
+			return
+		}
+		if _, isObject := r.RespBody.(map[string]any); !isObject {
+			return
+		}
+		if strings.SplitN(r.Path, "?", 2)[0] != strings.SplitN(rec.Path, "?", 2)[0] {
+			return
+		}
+		if best == nil || r.TS.After(best.TS) {
+			best = r
+		}
+	}
+	consider(rec)
+	f, err := os.Open(filepath.Join(dataDir, "recordings", ev.Upstream+".ndjson"))
+	if err == nil {
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" {
+				continue
+			}
+			var r proxy.Record
+			if json.Unmarshal([]byte(line), &r) == nil {
+				consider(&r)
+			}
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	attrs, err := json.Marshal(best.RespBody)
+	if err != nil {
+		return nil
+	}
+	state := &BundleState{Type: typ, Key: key, Attributes: attrs}
+	body := best.RespBody.(map[string]any)
+	for _, k := range []string{"status", "state"} {
+		if v, isString := body[k].(string); isString && v != "" {
+			state.State = &v
+			break
+		}
+	}
+	return state
 }
 
 func IsBundleArg(arg string) bool {

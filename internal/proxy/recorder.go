@@ -36,6 +36,17 @@ type Record struct {
 	Redactions int    `json:"redactions"`
 
 	Redacted []SectionRedaction `json:"redacted,omitempty"`
+
+	Inbound  bool      `json:"inbound,omitempty"`
+	Delivery *Delivery `json:"delivery,omitempty"`
+}
+
+type Delivery struct {
+	Event    string `json:"event,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	EventTS  int64  `json:"event_ts,omitempty"`
+	Index    int64  `json:"index"`
 }
 
 type SectionRedaction struct {
@@ -62,8 +73,41 @@ type Recorder struct {
 
 	observer func(*Record) bool
 
+	extractor func(*Exchange) *Delivery
+	seqMu     sync.Mutex
+	inbound   map[string]int64
+
 	specRules map[string][]sanitize.Rule
 	done      chan struct{}
+}
+
+func (rec *Recorder) SetDeliveryExtractor(fn func(*Exchange) *Delivery) { rec.extractor = fn }
+
+func (rec *Recorder) nextInbound(upstream string) int64 {
+	rec.seqMu.Lock()
+	defer rec.seqMu.Unlock()
+	if rec.inbound == nil {
+		rec.inbound = map[string]int64{}
+	}
+	rec.inbound[upstream]++
+	return rec.inbound[upstream]
+}
+
+func (rec *Recorder) describeDelivery(ex *Exchange) *Delivery {
+	d := &Delivery{}
+	if rec.extractor != nil {
+		if got := rec.extractor(ex); got != nil {
+			d = got
+		}
+	}
+	if d.ID != "" {
+		d.ID = rec.tok.HashOf(d.ID)[:24]
+	}
+	if d.Resource != "" {
+		d.Resource = rec.tok.HashOf(d.Resource)[:24]
+	}
+	d.Index = rec.nextInbound(ex.Upstream)
+	return d
 }
 
 func (rec *Recorder) Done() <-chan struct{} { return rec.done }
@@ -117,6 +161,10 @@ func (rec *Recorder) Run(captures <-chan *Exchange) {
 				rec.m.RecordingErrors.Add(1)
 				return
 			}
+			if ex.Inbound {
+				record.Inbound = true
+				record.Delivery = rec.describeDelivery(ex)
+			}
 
 			notable := false
 			if rec.observer != nil {
@@ -154,11 +202,15 @@ func (rec *Recorder) takeSample() bool {
 }
 
 func (rec *Recorder) persist(record *Record) error {
+	stream := record.Upstream
+	if record.Inbound {
+		stream = record.Upstream + ".webhooks"
+	}
 	rec.filesMu.Lock()
-	f, ok := rec.files[record.Upstream]
+	f, ok := rec.files[stream]
 	if !ok {
 		var err error
-		f, err = store.OpenNDJSON(filepath.Join(rec.dataDir, "recordings", record.Upstream+".ndjson"), rec.maxFile)
+		f, err = store.OpenNDJSON(filepath.Join(rec.dataDir, "recordings", stream+".ndjson"), rec.maxFile)
 		if err != nil {
 			rec.filesMu.Unlock()
 			return err
@@ -166,7 +218,7 @@ func (rec *Recorder) persist(record *Record) error {
 		if rec.ttl > 0 {
 			f.SetTTL(rec.ttl)
 		}
-		rec.files[record.Upstream] = f
+		rec.files[stream] = f
 	}
 	rec.filesMu.Unlock()
 	return f.Append(record)

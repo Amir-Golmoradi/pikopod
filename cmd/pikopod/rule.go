@@ -149,7 +149,7 @@ When ` + "`pikopod up`" + ` is serving the sandbox, add and drop apply to it at 
 			return nil
 		}}
 
-	c.AddCommand(list, add, drop, check)
+	c.AddCommand(list, add, drop, check, newRulePromoteCmd())
 	return c
 }
 
@@ -193,7 +193,7 @@ func pushRules(cfg *config.Config, name string, rs *sandbox.RuleSet) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	base := fmt.Sprintf("%s://%s:%d/_pikopod/sandboxes/%s/rules", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, name)
+	base := fmt.Sprintf("%s://%s:%d/_pikopod/v1/sandboxes/%s/rules", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, name)
 	req, err := http.NewRequest(http.MethodPut, base, bytes.NewReader(raw))
 	if err != nil {
 		return false, err

@@ -49,7 +49,7 @@
     },
     "kind": {
       "type": "string",
-      "description": "Observed SHAPE kinds and INCIDENT kinds. The enum below is the set pikopod emits TODAY, not a closed set for all time - treat an unrecognised kind as informational rather than an error. Incident kinds (upstream_error, upstream_unreachable, rate_limited, client_error) describe a failed exchange and need no baseline. behaviour_divergence means the provider answered a recorded request differently from the sandbox built from its spec; it needs no baseline, carries the sandbox's status in before and the provider's in after, the request field names (never values) in field, and a category. DECLARED events (source=declared) carry declared:<spec-diff check id>.",
+      "description": "Observed SHAPE kinds and INCIDENT kinds. The enum below is the set pikopod emits TODAY, not a closed set for all time - treat an unrecognised kind as informational rather than an error. Incident kinds (upstream_error, upstream_unreachable, rate_limited, client_error) describe a failed exchange and need no baseline. webhook_duplicate and webhook_out_of_order are incidents observed on the inbound webhook tap (the same delivery id twice; an older event for a resource arriving after a newer one); field carries the event name, status_class is empty. behaviour_divergence means the provider answered a recorded request differently from the sandbox built from its spec; it needs no baseline, carries the sandbox's status in before and the provider's in after, the request field names (never values) in field, and a category. DECLARED events (source=declared) carry declared:<spec-diff check id>.",
       "anyOf": [
         {
           "enum": [
@@ -65,7 +65,9 @@
             "upstream_unreachable",
             "rate_limited",
             "client_error",
-            "behaviour_divergence"
+            "behaviour_divergence",
+            "webhook_duplicate",
+            "webhook_out_of_order"
           ]
         },
         {

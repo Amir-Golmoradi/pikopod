@@ -152,6 +152,7 @@ func TestDivergenceReportsARefusalTheSandboxWouldNotHaveMade(t *testing.T) {
 	if a.DivergenceChecked.Load() != 2 || a.DivergenceUnverifiable.Load() != 0 {
 		t.Fatalf("checked=%d unverifiable=%d", a.DivergenceChecked.Load(), a.DivergenceUnverifiable.Load())
 	}
+	waitFor(t, func() bool { return sink.n.Load() >= 1 })
 	joined := strings.Join(sink.snapshot(), "\n")
 	if !strings.Contains(joined, "divergence") || !strings.Contains(joined, "reproduce "+ev.Fingerprint) {
 		t.Fatalf("the alert names the class and the reproduce handle:\n%s", joined)

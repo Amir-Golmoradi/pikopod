@@ -47,13 +47,13 @@ func windowKey(per string, req *ingressRequest, innerPath string) string {
 	switch per {
 	case "idempotency-key":
 		if k := req.header("idempotency-key"); k != nil {
-			return "ik:" + *k
+			return scopedKey(req.scope, "ik:"+*k)
 		}
-		return ""
+		return scopedKey(req.scope, "")
 	case "resource":
-		return "path:" + innerPath
+		return scopedKey(req.scope, "path:"+innerPath)
 	default:
-		return ""
+		return scopedKey(req.scope, "")
 	}
 }
 
@@ -121,6 +121,29 @@ func isWebhookFaultKind(kind string) bool {
 }
 
 func IsWebhookFaultKind(kind string) bool { return isWebhookFaultKind(kind) }
+
+func (f *FaultRule) Describe() string {
+	target := f.Method + " " + f.Path
+	if IsWebhookFaultKind(f.Kind) {
+		target = f.Event
+		if target == "" {
+			target = "any event"
+		}
+	}
+	line := f.Kind
+	if f.Status != 0 {
+		line += " " + strconv.Itoa(f.Status)
+	}
+	line += " on " + target
+	if f.Times > 0 {
+		line += fmt.Sprintf(" (first %d", f.Times)
+		if f.Per != "" {
+			line += " per " + f.Per
+		}
+		line += ")"
+	}
+	return line
+}
 
 var faultKinds = []string{
 	"error", "latency", "hang", "slow_body", "rate_limit",
@@ -333,7 +356,7 @@ func (e *Engine) evaluateFaults(endpoint *ir.Endpoint, req *ingressRequest, inne
 		if isWebhookFaultKind(f.Kind) {
 			continue
 		}
-		if f.Method != strings.ToUpper(endpoint.Method.Value) || f.Path != endpoint.PathTemplate.Value {
+		if f.Method != strings.ToUpper(endpoint.Method.Value) || !faultPathMatches(f.Path, endpoint.PathTemplate.Value, innerPath) {
 			continue
 		}
 		i := matchIdx
@@ -450,6 +473,36 @@ func (e *Engine) armedErrorResponse(endpoint *ir.Endpoint, f *FaultRule, status 
 		resp.Headers[strings.ToLower(k)] = v
 	}
 	return resp
+}
+
+func faultPathMatches(faultPath, template, innerPath string) bool {
+	if faultPath == template || faultPath == innerPath {
+		return true
+	}
+	want := strings.Split(strings.Trim(faultPath, "/"), "/")
+	have := strings.Split(strings.Trim(innerPath, "/"), "/")
+	if len(want) != len(have) {
+		return false
+	}
+	for i := range want {
+		if !segmentMatches(want[i], have[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func segmentMatches(want, have string) bool {
+	open := strings.IndexByte(want, '{')
+	if open < 0 {
+		return want == have
+	}
+	prefix := want[:open]
+	suffix := ""
+	if end := strings.LastIndexByte(want, '}'); end >= 0 && end+1 < len(want) {
+		suffix = want[end+1:]
+	}
+	return len(have) >= len(prefix)+len(suffix) && strings.HasPrefix(have, prefix) && strings.HasSuffix(have, suffix)
 }
 
 func (e *Engine) faultFires(f *FaultRule, index int, method, innerPath string, probability float64) bool {

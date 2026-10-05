@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,6 +35,12 @@ type Upstream struct {
 	SpecSource string `yaml:"spec_source,omitempty"`
 
 	Incidents Incidents `yaml:"incidents,omitempty"`
+
+	Webhooks *Webhooks `yaml:"webhooks,omitempty"`
+}
+
+type Webhooks struct {
+	Receiver string `yaml:"receiver"`
 }
 
 type Incidents struct {
@@ -177,6 +184,15 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func Ephemeral(dataDir string) (*Config, error) {
+	c := &Config{DataDir: dataDir, Upstreams: map[string]Upstream{}}
+	if err := c.finish(); err != nil {
+		return nil, err
+	}
+	c.DataDir = dataDir
+	return c, nil
 }
 
 func (c *Config) finish() error {
@@ -335,6 +351,12 @@ func (c *Config) finish() error {
 		}
 		if !strings.HasPrefix(u.Listen, "/") {
 			return errfmt.New("invalid upstream listen route", fmt.Sprintf("upstreams.%s.listen %q must start with /", name, u.Listen), "use a route like /"+name, "docs/config-reference.md#upstreams")
+		}
+		if u.Webhooks != nil {
+			recv, err := url.Parse(u.Webhooks.Receiver)
+			if err != nil || recv.Scheme == "" || recv.Host == "" {
+				return errfmt.New("invalid webhook receiver", fmt.Sprintf("upstreams.%s.webhooks.receiver %q is not an absolute URL", name, u.Webhooks.Receiver), "use the full URL your app listens on for this provider's webhooks, like http://localhost:3000/hooks/"+name, "docs/config-reference.md#upstreams")
+			}
 		}
 		if u.Listen == "/" {
 			return errfmt.New("upstream listen route cannot be /", fmt.Sprintf("upstreams.%s would swallow EVERY path, shadowing all other upstreams and the control endpoints", name), "use a named route like /"+name, "docs/config-reference.md#upstreams")

@@ -39,7 +39,7 @@ func (e *Engine) matchRecording(req *ingressRequest, innerPath string, allow fun
 	if reqBody != nil {
 		reqBody = plainJSON(reqBody)
 	}
-	rec, diag := e.recordings.MatchValueWhere(req.method, innerPath, reqBody, allow)
+	rec, diag := e.recordings.MatchValueScoped(req.scope, req.method, innerPath, reqBody, allow)
 	if rec == nil {
 		if diag.Closest != "" {
 			e.tracef("recordings", "no recordings for %s %s; closest recorded endpoint: %s (%d recordings)",

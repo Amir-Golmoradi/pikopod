@@ -509,6 +509,8 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		drift.RateLimited:         "rate limited",
 		drift.ClientError:         "requests rejected",
 		drift.BehaviourDivergence: "provider diverged from the sandbox",
+		drift.WebhookDuplicate:    "webhook delivered twice",
+		drift.WebhookOutOfOrder:   "webhooks arrived out of order",
 	}[ev.Kind]
 	var detail string
 	switch ev.Kind {
@@ -538,6 +540,10 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		detail = fmt.Sprintf("upstream rejected our requests with %s above the configured rate — usually our own payload", ev.After)
 	case drift.BehaviourDivergence:
 		detail = fmt.Sprintf("%s: %s — reproduce it locally: `pikopod reproduce %s`", ev.Category, ev.Detail, ev.Fingerprint)
+	case drift.WebhookDuplicate:
+		detail = fmt.Sprintf("`%s` arrived twice with one delivery id — a handler that is not idempotent ran twice; rehearse it: `pikopod scenario check %s duplicate_delivery`", ev.Field, ev.Upstream)
+	case drift.WebhookOutOfOrder:
+		detail = fmt.Sprintf("`%s` arrived after a newer event for the same resource — a handler that applies events in arrival order went backwards; rehearse it: `pikopod chaos %s --kind reorder_webhook`", ev.Field, ev.Upstream)
 	}
 	note := ""
 	if ev.Note != "" {
@@ -547,7 +553,7 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 	if ev.Note != "" && ev.Level == "INFO" {
 		icon = ":memo:"
 	}
-	if ev.Kind.IsDivergence() && ev.Level == "WARN" {
+	if (ev.Kind.IsDivergence() || ev.Kind.IsWebhook()) && ev.Level == "WARN" {
 		icon = ":warning:"
 	}
 
@@ -556,6 +562,12 @@ func RenderWithRetention(ev *DriftEvent, retention time.Duration) string {
 		word, replay = "incident", "reproduce"
 		if ev.Kind.IsDivergence() {
 			word = "divergence"
+		}
+		if ev.Kind.IsWebhook() {
+			return fmt.Sprintf(
+				"%s *pikopod %s — %s* on `%s %s` (%s)\n%s%s\nfingerprint `%s` · first seen %s · %d occurrence(s)",
+				icon, word, head, ev.Method, ev.Endpoint, ev.Upstream, detail, note,
+				ev.Fingerprint, ev.FirstSeen.Format(time.RFC3339), ev.Occurrences)
 		}
 		if retention > 0 {
 			portable = " · reproducible until " + ev.LastSeen.Add(retention).UTC().Format(time.RFC3339)
@@ -590,6 +602,24 @@ func (a *Alerter) persist() {
 		return
 	}
 	_ = store.WriteFileAtomic(a.statePath, raw)
+}
+
+func AckedFingerprints(dataDir string) map[string]bool {
+	out := map[string]bool{}
+	raw, err := os.ReadFile(filepath.Join(dataDir, "alerts", "state.json"))
+	if err != nil {
+		return out
+	}
+	var states map[string]*fpState
+	if json.Unmarshal(raw, &states) != nil {
+		return out
+	}
+	for fp, st := range states {
+		if st != nil && st.Acked {
+			out[fp] = true
+		}
+	}
+	return out
 }
 
 func (a *Alerter) load() {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,6 +187,7 @@ type addOptions struct {
 	Recordings   string
 	EmitSpec     string
 	Webhooks     string
+	SeedData     string
 }
 
 func recordingsModeFor(dataDir, upstream, requested string) (string, error) {
@@ -321,6 +323,17 @@ func sandboxAddOpts(cfg *config.Config, name string, o addOptions, out io.Writer
 	}
 	fmt.Fprintf(out, "sandbox %s registered (%s, %d endpoints)\n", name, entry.ID, len(def.Endpoints))
 	fmt.Fprintf(out, "responses: %s\n", sandbox.RealismLine(def))
+	if o.SeedData != "" {
+		items, err := loadSeedFile(o.SeedData)
+		if err != nil {
+			return err
+		}
+		n, err := seedOffline(cfg, &entry, items)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "seeded: %d resources from %s\n", n, o.SeedData)
+	}
 	printRecordingsMode(out, cfg.DataDir, recordingsUpstream, recordings)
 	if len(def.Webhooks) > 0 {
 		if webhookURL != "" {
@@ -449,6 +462,9 @@ func sandboxList(cfg *config.Config, out io.Writer) error {
 		if defErr == nil {
 			fmt.Fprintf(out, "  responses: %s\n", sandbox.RealismLine(def))
 		}
+		if items := readSeedItems(cfg.DataDir, e.Name); items != nil {
+			fmt.Fprintf(out, "  seeded: %d resources\n", countSeedItems(items))
+		}
 		if defErr == nil && len(def.Webhooks) > 0 {
 			declared, triggered, emitOnly, untriggered := webhookCounts(def)
 			line := fmt.Sprintf("  webhooks: %d declared, %d triggered, %d emit-only", declared, triggered, emitOnly)
@@ -488,17 +504,50 @@ func sandboxReset(cfg *config.Config, name string, out io.Writer) error {
 	if entry == nil {
 		return errfmt.New("unknown sandbox", fmt.Sprintf("%q is not registered", name), "see `pikopod sandbox list`; add it with `pikopod sandbox add`", "docs/config-reference.md#listing-and-resetting-sandboxes")
 	}
+	reached, status, resp, err := controlPlanePost(cfg, name, "reset", nil)
+	if err != nil {
+		return err
+	}
+	if reached {
+		if status >= 400 {
+			msg, _ := resp["message"].(string)
+			return errfmt.New("the running sandbox could not reset", msg, "check `pikopod up`'s output and retry", seedDocs)
+		}
+		fmt.Fprintf(out, "sandbox %s reset on the running server: %v seeded resource(s) restored, faults, mode and journal cleared\n", name, resp["seeded"])
+		return nil
+	}
 	st, err := sandbox.OpenStore(cfg.DataDir)
 	if err != nil {
 		return err
 	}
-	defer st.Close()
 	if err := st.Clear(entry.ID); err != nil {
+		st.Close()
 		return errfmt.Newf("cannot clear sandbox state", "check permissions on "+cfg.DataDir, "docs/config-reference.md#data_dir", "%v", err)
 	}
-
-	fmt.Fprintf(out, "sandbox %s cleared — stored state is empty (seed %s unchanged)\n", name, entry.Seed)
-	fmt.Fprintln(out, "note: a running `pikopod up` keeps in-memory journal/idempotency/webhook state for this sandbox — restart it for a fully fresh slate")
+	st.Close()
+	seeded := 0
+	if items := readSeedItems(cfg.DataDir, name); items != nil {
+		_, def, err := loadSandboxDef(cfg, name)
+		if err != nil {
+			return err
+		}
+		st, err := sandbox.OpenStore(cfg.DataDir)
+		if err != nil {
+			return err
+		}
+		eng, err := sandbox.NewEngine(def, sandbox.Config{ID: entry.ID, Seed: entry.Seed, Mode: entry.Mode, VirtualClockMs: entry.CreatedClockMs, RecordingsMode: "off"}, st)
+		if err != nil {
+			st.Close()
+			return err
+		}
+		seeded, err = eng.Seed(items)
+		eng.Close()
+		st.Close()
+		if err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(out, "sandbox %s cleared — %d seeded resource(s) restored (seed %s unchanged)\n", name, seeded, entry.Seed)
 	fmt.Fprintln(out, "note: the id sequence keeps advancing after a reset; for a byte-identical replay from scratch, register a fresh sandbox with the same seed")
 	return nil
 }
@@ -551,6 +600,8 @@ type sandboxServer struct {
 	modes map[string]*mode.Spec
 
 	handlers map[string]http.Handler
+
+	forks forkSet
 }
 
 func newSandboxServer(cfg *config.Config) (*sandboxServer, error) {
@@ -574,6 +625,16 @@ func newSandboxServer(cfg *config.Config) (*sandboxServer, error) {
 }
 
 func (s *sandboxServer) Close() error {
+	s.stopReaper()
+	s.forks.mu.Lock()
+	names := make([]string, 0, len(s.forks.forks))
+	for name := range s.forks.forks {
+		names = append(names, name)
+	}
+	s.forks.mu.Unlock()
+	for _, name := range names {
+		s.dropFork(name)
+	}
 	s.mu.Lock()
 	handlers := make([]http.Handler, 0, len(s.handlers))
 	for _, h := range s.handlers {
@@ -608,6 +669,19 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 	if !ok {
 		return nil, nil
 	}
+	engine, err := s.buildEngine(entry, entry.ID, "/"+name)
+	if err != nil {
+		return nil, err
+	}
+	if items := readSeedItems(s.cfg.DataDir, name); items != nil {
+		engine.SetSeedItems(items)
+	}
+	s.handlers[name] = engine
+	return engine, nil
+}
+
+func (s *sandboxServer) buildEngine(entry sandboxEntry, id, prefix string) (*sandbox.Engine, error) {
+	name := entry.Name
 	raw, err := os.ReadFile(filepath.Join(s.cfg.DataDir, entry.IRFile))
 	if err != nil {
 		return nil, errfmt.Newf("cannot read the persisted IR for "+name, "re-add the sandbox with `pikopod sandbox add`", "docs/config-reference.md#data_dir", "%v", err)
@@ -625,7 +699,7 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 		return nil, err
 	}
 	engine, err := sandbox.NewEngine(&def, sandbox.Config{
-		ID:                entry.ID,
+		ID:                id,
 		Seed:              entry.Seed,
 		Mode:              entry.Mode,
 		VirtualClockMs:    entry.CreatedClockMs,
@@ -641,8 +715,7 @@ func (s *sandboxServer) handlerFor(name string) (http.Handler, error) {
 		return nil, err
 	}
 
-	engine.SetMountPrefix("/" + name)
-	s.handlers[name] = engine
+	engine.SetMountPrefix(prefix)
 	return engine, nil
 }
 
@@ -684,6 +757,7 @@ func (s *sandboxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.touchFork(name)
 	r2 := r.Clone(r.Context())
 	_, decodedRest := splitSandboxPath(r.URL.Path)
 	r2.URL.Path = decodedRest
@@ -696,8 +770,13 @@ func (s *sandboxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) >= 2 && parts[1] == "v1" {
+		parts = append(parts[:1], parts[2:]...)
+	}
+	w.Header().Set("x-pikopod-api", "v1")
 
-	admin := len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks" || parts[3] == "rules")
+	dayZero := len(parts) == 4 && (parts[3] == "seed" || parts[3] == "snapshot" || parts[3] == "restore" || parts[3] == "reset" || parts[3] == "fork" || parts[3] == "forks")
+	admin := dayZero || len(parts) == 4 && (parts[3] == "faults" || parts[3] == "requests" || parts[3] == "mode" || parts[3] == "webhooks" || parts[3] == "rules")
 	emit := len(parts) == 5 && parts[3] == "webhooks" && parts[4] == "emit"
 	verify := len(parts) == 5 && parts[3] == "mode" && parts[4] == "verify"
 	if len(parts) < 4 || parts[1] != "sandboxes" || (!admin && !emit && !verify) {
@@ -715,6 +794,11 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("content-type", "application/json; charset=utf-8")
+	if dayZero {
+		s.touchFork(parts[2])
+		s.serveDayZero(w, r, parts[2], parts[3], engine)
+		return
+	}
 	if emit {
 		s.serveWebhookEmit(w, r, engine)
 		return
@@ -741,16 +825,33 @@ func (s *sandboxServer) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	if parts[3] == "requests" {
 
+		q := r.URL.Query()
+		scope, scoped := q.Get("scope"), q.Has("scope")
 		switch r.Method {
 		case http.MethodGet:
 			limit := 0
-			if v := r.URL.Query().Get("limit"); v != "" {
+			if v := q.Get("limit"); v != "" {
 				limit, _ = strconv.Atoi(v)
 			}
-			entries, evicted := engine.JournalEntries(limit)
-			json.NewEncoder(w).Encode(map[string]any{"requests": entries, "evicted": evicted})
+			var entries []sandbox.JournalEntry
+			var evicted int64
+			if scoped {
+				entries, evicted = engine.Scoped(scope).JournalEntries(limit)
+			} else {
+				entries, evicted = engine.JournalEntries(limit)
+			}
+			live, scopesEvicted := engine.Scopes()
+			body := map[string]any{"requests": entries, "evicted": evicted, "scopes": map[string]any{"live": live, "evicted": scopesEvicted}}
+			if scoped {
+				body["scope"] = scope
+			}
+			json.NewEncoder(w).Encode(body)
 		case http.MethodDelete:
-			engine.ResetJournal()
+			if scoped {
+				engine.ResetJournalScope(scope)
+			} else {
+				engine.ResetJournal()
+			}
 			json.NewEncoder(w).Encode(map[string]any{"reset": true})
 		default:
 			writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
@@ -831,6 +932,7 @@ func addImportFlags(c *cobra.Command) {
 	c.Flags().String("webhooks", "", "YAML/JSON file describing how the provider wraps and signs deliveries, and which calls fire which events")
 	c.Flags().String("emit-spec", "", "write the spec the import used (extracted or fetched) to this path so it can be reviewed, corrected and committed")
 	c.Flags().String("upstream", "", "link to a drift-agent upstream so its traffic refines this contract (auto when names match)")
+	c.Flags().String("seed-data", "", "YAML or JSON file mapping collection names to lists of resources to store before the first request, like widgets: [{id: w_1, name: gear}]")
 	c.Flags().String("recordings", "", "first | fallback | off: the linked upstream's recordings answer before the spec, only for paths the spec does not declare, or never (default: first when recordings exist, else off)")
 }
 
@@ -840,6 +942,7 @@ func addOptionsFrom(cmd *cobra.Command, spec string) addOptions {
 	o.WebhookURL, _ = cmd.Flags().GetString("webhook-url")
 	o.UpstreamLink, _ = cmd.Flags().GetString("upstream")
 	o.Recordings, _ = cmd.Flags().GetString("recordings")
+	o.SeedData, _ = cmd.Flags().GetString("seed-data")
 	o.EmitSpec, _ = cmd.Flags().GetString("emit-spec")
 	o.Webhooks, _ = cmd.Flags().GetString("webhooks")
 	return o
@@ -878,13 +981,17 @@ func newSandboxRequestsCmd() *cobra.Command {
 			}
 			limit, _ := cmd.Flags().GetInt("last")
 			reset, _ := cmd.Flags().GetBool("reset")
-			url := fmt.Sprintf("%s://%s:%d/_pikopod/sandboxes/%s/requests", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, args[0])
+			scope, _ := cmd.Flags().GetString("scope")
+			url := fmt.Sprintf("%s://%s:%d/_pikopod/v1/sandboxes/%s/requests", cfg.Scheme(), cfg.Listen, cfg.SandboxPort, args[0])
 			client := cfg.LocalClient(5 * time.Second)
 
 			var resp *http.Response
 			method, target := http.MethodGet, url+"?limit="+strconv.Itoa(limit)
 			if reset {
-				method, target = http.MethodDelete, url
+				method, target = http.MethodDelete, url+"?"
+			}
+			if cmd.Flags().Changed("scope") {
+				target += "&scope=" + neturl.QueryEscape(scope)
 			}
 			req, _ := http.NewRequest(method, target, nil)
 			if token := cfg.Token(); token != "" {
@@ -901,12 +1008,20 @@ func newSandboxRequestsCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if reset {
+				if cmd.Flags().Changed("scope") {
+					fmt.Fprintf(out, "journal reset for scope %q\n", scope)
+					return nil
+				}
 				fmt.Fprintln(out, "journal reset")
 				return nil
 			}
 			var payload struct {
 				Requests []sandbox.JournalEntry `json:"requests"`
 				Evicted  int64                  `json:"evicted"`
+				Scopes   struct {
+					Live    int   `json:"live"`
+					Evicted int64 `json:"evicted"`
+				} `json:"scopes"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 				return err
@@ -922,14 +1037,21 @@ func newSandboxRequestsCmd() *cobra.Command {
 				fmt.Fprintln(out, line)
 			}
 			fmt.Fprintf(out, "%d request(s)", len(payload.Requests))
+			if cmd.Flags().Changed("scope") {
+				fmt.Fprintf(out, " in scope %q", scope)
+			}
 			if payload.Evicted > 0 {
 				fmt.Fprintf(out, " — %d older entries EVICTED (upper-bound verifications fail closed)", payload.Evicted)
+			}
+			if payload.Scopes.Live > 0 || payload.Scopes.Evicted > 0 {
+				fmt.Fprintf(out, " — %d live scope(s), %d evicted", payload.Scopes.Live, payload.Scopes.Evicted)
 			}
 			fmt.Fprintln(out)
 			return nil
 		}}
 	c.Flags().Int("last", 50, "number of most recent requests to show")
 	c.Flags().Bool("reset", false, "clear the journal (and its eviction taint)")
+	c.Flags().String("scope", "", "show or reset one partition: the requests sent with this X-Pikopod-Scope header")
 	return c
 }
 
@@ -951,4 +1073,15 @@ func (s *sandboxServer) serveRules(w http.ResponseWriter, r *http.Request, engin
 	default:
 		writeSandboxJSONError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
 	}
+}
+
+func newSandboxSeedCmd() *cobra.Command {
+	return &cobra.Command{Use: "seed <name> <file>", Short: "Store resources from a YAML or JSON file so reads answer before the first create", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+			return sandboxSeed(cfg, args[0], args[1], cmd.OutOrStdout())
+		}}
 }

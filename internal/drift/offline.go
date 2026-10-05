@@ -9,18 +9,25 @@ type OfflineFinding struct {
 }
 
 func DiffRecord(fam *baseline.Family, status int, body any) []OfflineFinding {
+	findings := DiffRecordFindings("", fam, status, body)
+	out := make([]OfflineFinding, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, OfflineFinding{Kind: string(f.Kind), Field: f.Field, Detail: f.Detail()})
+	}
+	return out
+}
+
+func DiffRecordFindings(upstream string, fam *baseline.Family, status int, body any) []Finding {
 	if fam == nil || !fam.Frozen {
 		return nil
 	}
 	obs := baseline.Observation{Family: fam, Ready: true, Fields: baseline.Flatten(body), Template: fam.Template, Status: status}
-	findings := Diff("", obs, map[string]bool{fam.StatusClass: true})
-	out := make([]OfflineFinding, 0, len(findings))
-	for _, f := range findings {
-		detail := f.After
-		if f.Kind == FieldRemoved {
-			detail = f.Before
-		}
-		out = append(out, OfflineFinding{Kind: string(f.Kind), Field: f.Field, Detail: detail})
+	return Diff(upstream, obs, map[string]bool{fam.StatusClass: true})
+}
+
+func (f Finding) Detail() string {
+	if f.Kind == FieldRemoved {
+		return f.Before
 	}
-	return out
+	return f.After
 }
