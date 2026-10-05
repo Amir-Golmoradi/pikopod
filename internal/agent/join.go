@@ -12,25 +12,7 @@ import (
 )
 
 func AnnotateDocumented(findings []drift.Finding, doc *specwatch.Documented) {
-	if doc == nil {
-		return
-	}
-	for i := range findings {
-		f := &findings[i]
-		documented := false
-		switch f.Kind {
-		case drift.FieldAdded:
-			documented = doc.HasFieldAdded(f.Method, f.Template, f.Field)
-		case drift.EnumValueNew:
-			documented = doc.HasEnumValueAdded(f.Method, f.Template, f.Field, f.After)
-		case drift.StatusNew, drift.StatusCodeChanged:
-			documented = doc.HasStatusAdded(f.Method, f.Template, f.After)
-		}
-		if documented {
-			f.Documented = true
-			f.Note = "documented: the provider's new spec version declares this change"
-		}
-	}
+	specwatch.AnnotateDocumented(findings, doc)
 }
 
 func EnrichDeclaredFinding(f *specdiff.Finding, fams []*baseline.Family) {

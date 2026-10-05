@@ -112,8 +112,11 @@ func TestGateFindsOfflineDrift(t *testing.T) {
 	for _, f := range res.Findings {
 		kinds[f.Kind] = true
 	}
-	if !kinds["enum_value_new"] || !kinds["field_added"] {
-		t.Fatalf("gate should find enum + field drift, got %+v", res.Findings)
+	for _, f := range res.Accepted {
+		kinds["accepted:"+f.Kind] = true
+	}
+	if !kinds["enum_value_new"] || !kinds["accepted:field_added"] {
+		t.Fatalf("gate should find enum drift and accept the added field at medium, got %+v accepted %+v", res.Findings, res.Accepted)
 	}
 
 	writeRecordings(t, dir, "pay", []proxy.Record{

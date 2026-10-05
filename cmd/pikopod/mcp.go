@@ -22,6 +22,7 @@ import (
 	"github.com/pikopod/pikopod/internal/config"
 	"github.com/pikopod/pikopod/internal/conformance"
 	"github.com/pikopod/pikopod/internal/contract"
+	"github.com/pikopod/pikopod/internal/drift"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/mcp"
 	"github.com/pikopod/pikopod/internal/replay"
@@ -248,14 +249,26 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 		}})
 
 	s.Register(mcp.Tool{Name: "replay_ci", Annotations: readOnly(),
-		Description: "The CI gate: diff recorded traffic offline against frozen baselines for one or more upstreams. FINDINGS lists drift per endpoint; CLEAN means every gated recording matched. UNVERIFIABLE with a reason when an upstream has no baselines or no recordings, which is not a pass. Recordings made before an endpoint warmed up are skipped and counted.",
-		InputSchema: schema(nil, map[string]any{"upstreams": map[string]any{"type": "array", "items": prop("string", ""), "description": "upstreams to gate (default: all)"}}),
+		Description: "The CI gate: diff recorded traffic offline against frozen baselines for one or more upstreams. FINDINGS lists drift at or above fail_on per endpoint; CLEAN means every gated recording matched or every finding was accepted. Findings below fail_on (default medium) and accepted fingerprints are reported under accepted, never as findings. UNVERIFIABLE with a reason when an upstream has no baselines or no recordings, which is not a pass. Recordings made before an endpoint warmed up are skipped and counted.",
+		InputSchema: schema(nil, map[string]any{
+			"upstreams": map[string]any{"type": "array", "items": prop("string", ""), "description": "upstreams to gate (default: all)"},
+			"fail_on":   prop("string", "lowest risk tier that fails the gate: high, medium or low (default medium)"),
+		}),
 		Handler: func(_ context.Context, raw json.RawMessage) (any, error) {
 			var args struct {
 				Upstreams []string `json:"upstreams"`
+				FailOn    string   `json:"fail_on"`
 			}
 			if err := decodeArgs(raw, &args); err != nil {
 				return nil, err
+			}
+			failOn := drift.RiskMedium
+			if args.FailOn != "" {
+				parsed, err := drift.ParseRisk(args.FailOn)
+				if err != nil {
+					return nil, err
+				}
+				failOn = parsed
 			}
 			ups := args.Upstreams
 			if len(ups) == 0 {
@@ -265,7 +278,7 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 			findings := 0
 			var unverifiable []string
 			for _, name := range ups {
-				res, err := replay.Gate(cfg.DataDir, name, cfg.Upstreams[name].VolatileFields)
+				res, err := replay.GateWith(cfg.DataDir, name, cfg.Upstreams[name].VolatileFields, gateOptions(cfg.DataDir, name, failOn))
 				if err != nil {
 					var e *errfmt.E
 					if errors.As(err, &e) {
@@ -276,7 +289,7 @@ func mcpServer(cfg *config.Config) *mcp.Server {
 					return nil, err
 				}
 				findings += len(res.Findings)
-				results[name] = map[string]any{"gated": true, "records": res.Records, "skipped_pre_warmup": res.Skipped, "findings": res.Findings}
+				results[name] = map[string]any{"gated": true, "records": res.Records, "skipped_pre_warmup": res.Skipped, "fail_on": res.FailOn, "findings": res.Findings, "accepted": res.Accepted}
 			}
 			data := map[string]any{"upstreams": results}
 			switch {

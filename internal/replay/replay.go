@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pikopod/pikopod/internal/alert"
 	"github.com/pikopod/pikopod/internal/baseline"
 	"github.com/pikopod/pikopod/internal/drift"
 	"github.com/pikopod/pikopod/internal/errfmt"
@@ -373,19 +374,43 @@ func (s *Set) stripVolatile(node any, path string) any {
 
 type GateResult struct {
 	Findings []GateFinding `json:"findings"`
+	Accepted []GateFinding `json:"accepted"`
+	FailOn   string        `json:"fail_on"`
 	Records  int           `json:"records"`
 	Skipped  int           `json:"skipped_unwarmed"`
 }
 
 type GateFinding struct {
-	Method   string `json:"method"`
-	Template string `json:"template"`
-	Kind     string `json:"kind"`
-	Field    string `json:"field,omitempty"`
-	Detail   string `json:"detail,omitempty"`
+	Method      string `json:"method"`
+	Template    string `json:"template"`
+	Kind        string `json:"kind"`
+	Field       string `json:"field,omitempty"`
+	Detail      string `json:"detail,omitempty"`
+	Risk        string `json:"risk"`
+	Fingerprint string `json:"fingerprint"`
+	Documented  bool   `json:"documented,omitempty"`
+	Because     string `json:"because,omitempty"`
 }
 
+type GateOptions struct {
+	FailOn   drift.Risk
+	Accepted map[string]bool
+	Annotate func([]drift.Finding)
+}
+
+const AcceptedFingerprint = "fingerprint accepted"
+
 func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error) {
+	return GateWith(dataDir, upstream, volatileFields, GateOptions{})
+}
+
+func GateWith(dataDir, upstream string, volatileFields []string, opts GateOptions) (*GateResult, error) {
+	if opts.FailOn == "" {
+		opts.FailOn = drift.RiskMedium
+	}
+	if opts.Accepted == nil {
+		opts.Accepted = alert.AckedFingerprints(dataDir)
+	}
 	m, _, err := volatile.Compile(volatileFields)
 	if err != nil {
 		return nil, err
@@ -399,7 +424,7 @@ func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error
 	if err != nil {
 		return nil, errfmt.Newf("no recordings for "+upstream, "send traffic through the agent first", "docs/config-reference.md#data_dir", "%v", err)
 	}
-	res := &GateResult{}
+	res := &GateResult{FailOn: string(opts.FailOn)}
 	for _, line := range strings.Split(string(raw), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -418,25 +443,55 @@ func Gate(dataDir, upstream string, volatileFields []string) (*GateResult, error
 		if rec.RespKind != "json" {
 			continue
 		}
-		for _, f := range drift.DiffRecord(fam, rec.Status, rec.RespBody) {
-			if _, drop := m.Match(f.Field); drop && f.Kind == string(drift.EnumValueNew) {
+		findings := drift.DiffRecordFindings(upstream, fam, rec.Status, rec.RespBody)
+		if opts.Annotate != nil {
+			opts.Annotate(findings)
+		}
+		for _, f := range findings {
+			if _, drop := m.Match(f.Field); drop && f.Kind == drift.EnumValueNew {
 				continue
 			}
-			res.Findings = append(res.Findings, GateFinding{Method: rec.Method, Template: template, Kind: f.Kind, Field: f.Field, Detail: f.Detail})
+			gf := GateFinding{Method: rec.Method, Template: template, Kind: string(f.Kind), Field: f.Field, Detail: f.Detail(), Risk: string(f.Risk()), Fingerprint: f.Fingerprint(), Documented: f.Documented}
+			switch {
+			case opts.Accepted[gf.Fingerprint]:
+				gf.Because = AcceptedFingerprint
+				res.Accepted = append(res.Accepted, gf)
+			case f.Risk().Rank() < opts.FailOn.Rank():
+				gf.Because = "below --fail-on " + string(opts.FailOn)
+				res.Accepted = append(res.Accepted, gf)
+			default:
+				res.Findings = append(res.Findings, gf)
+			}
 		}
 	}
+	res.Findings = dedupeFindings(res.Findings)
+	res.Accepted = dedupeFindings(res.Accepted)
+	sortByRisk(res.Findings)
+	sortByRisk(res.Accepted)
+	return res, nil
+}
 
+func sortByRisk(fs []GateFinding) {
+	sort.SliceStable(fs, func(i, j int) bool {
+		ri, rj := drift.Risk(fs[i].Risk).Rank(), drift.Risk(fs[j].Risk).Rank()
+		if ri != rj {
+			return ri > rj
+		}
+		return fs[i].Method+fs[i].Template+fs[i].Field < fs[j].Method+fs[j].Template+fs[j].Field
+	})
+}
+
+func dedupeFindings(in []GateFinding) []GateFinding {
 	seen := map[string]bool{}
-	uniq := res.Findings[:0]
-	for _, f := range res.Findings {
+	out := in[:0]
+	for _, f := range in {
 		k := f.Method + "|" + f.Template + "|" + f.Kind + "|" + f.Field + "|" + f.Detail
 		if !seen[k] {
 			seen[k] = true
-			uniq = append(uniq, f)
+			out = append(out, f)
 		}
 	}
-	res.Findings = uniq
-	return res, nil
+	return out
 }
 
 func parseBody(body []byte) any {
