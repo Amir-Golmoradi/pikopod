@@ -207,11 +207,11 @@ same seed can replay identically.
 ### Request journal
 
 ```bash
-pikopod sandbox requests examplepay --last 20
+pikopod requests examplepay --last 20
 ```
 
-The journal reads requests received by the running sandbox. Start `pikopod up`
-first and use a registered name from `pikopod sandbox list`. If the journal is
+`pikopod requests` reads requests received by the running sandbox. Start
+`pikopod up` first and use a registered name from `pikopod sandbox list`. If the journal is
 unavailable, check the name and the server's reported HTTP error. The command
 uses the configured sandbox port and listener token. `--reset` clears the
 journal.
