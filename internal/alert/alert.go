@@ -604,6 +604,24 @@ func (a *Alerter) persist() {
 	_ = store.WriteFileAtomic(a.statePath, raw)
 }
 
+func AckedFingerprints(dataDir string) map[string]bool {
+	out := map[string]bool{}
+	raw, err := os.ReadFile(filepath.Join(dataDir, "alerts", "state.json"))
+	if err != nil {
+		return out
+	}
+	var states map[string]*fpState
+	if json.Unmarshal(raw, &states) != nil {
+		return out
+	}
+	for fp, st := range states {
+		if st != nil && st.Acked {
+			out[fp] = true
+		}
+	}
+	return out
+}
+
 func (a *Alerter) load() {
 	raw, err := os.ReadFile(a.statePath)
 	if err != nil {

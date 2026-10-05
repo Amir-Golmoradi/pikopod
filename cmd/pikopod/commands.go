@@ -350,6 +350,7 @@ func newReplayCmd() *cobra.Command {
 		RunE: runReplay}
 	c.Flags().Bool("ci", false, "CI gate: diff recordings offline against frozen baselines")
 	c.Flags().String("handoff", "", "also write the JSON findings here (for `pikopod pr comment`)")
+	c.Flags().String("fail-on", "medium", "lowest risk tier that fails the gate: high, medium or low")
 	c.Flags().String("serve", "", "RETIRED: use `import --recordings first|fallback` — recordings now serve through the sandbox")
 	return c
 }

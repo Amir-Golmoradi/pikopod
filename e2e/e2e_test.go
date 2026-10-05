@@ -318,8 +318,12 @@ slack:
 	}
 
 	out, code = run(t, dir, "replay", "--ci", "prov")
+	if code != 0 || !strings.Contains(out, "accepted (below --fail-on medium)") || !strings.Contains(out, "fee_bearer") {
+		t.Fatalf("an added field is accepted at the default tier, named under accepted (got %d): %s", code, out)
+	}
+	out, code = run(t, dir, "replay", "--ci", "--fail-on", "low", "prov")
 	if code != 1 || !strings.Contains(out, "field_added") || !strings.Contains(out, "fee_bearer") {
-		t.Fatalf("drifted gate must exit 1 naming the drift (got %d): %s", code, out)
+		t.Fatalf("at --fail-on low the drifted gate must exit 1 naming the drift (got %d): %s", code, out)
 	}
 
 	out, code = run(t, dir, "scenario", "from-drift", fp)
