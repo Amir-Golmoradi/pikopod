@@ -162,9 +162,8 @@ never a provider. Binding a non-loopback address requires a token.`}
 				return err
 			}
 			defer resp.Body.Close()
-			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-			fmt.Fprintf(cmd.OutOrStdout(), "cleared: %s\n", bytes.TrimSpace(raw))
-			return nil
+
+			return printCleared(resp, cmd.OutOrStdout())
 		}}
 
 	verify := &cobra.Command{Use: "verify <sandbox>", Short: "Check what your tests sent against the standing scenario's verification steps (exit 0 pass / 1 fail / 2 error)", Args: cobra.ExactArgs(1),
