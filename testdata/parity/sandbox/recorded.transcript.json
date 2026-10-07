@@ -56,7 +56,7 @@
       }
     },
     {
-      "name": "read-recorded-id-store-lacks",
+      "name": "read-recorded-id-resolves-to-store",
       "method": "GET",
       "path": "/widgets/wdg_7f3a9c",
       "reqHeaders": {},
@@ -64,15 +64,15 @@
       "status": 200,
       "respHeaders": {
         "content-type": "application/json; charset=utf-8",
-        "x-pikopod-source": "recorded"
+        "etag": "\"0\""
       },
       "respBody": {
-        "created": "2026-09-30T10:00:00Z",
-        "id": "wdg_7f3a9c",
-        "livemode": false,
         "name": "gear",
+        "size": 3,
+        "created": "2026-09-30T10:00:00Z",
+        "livemode": false,
         "object": "widget",
-        "size": 3
+        "id": "widgets_1"
       }
     },
     {
