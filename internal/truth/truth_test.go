@@ -1,6 +1,10 @@
 package truth
 
 import (
+	"encoding/json"
+	"github.com/pikopod/pikopod/internal/replay"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -100,6 +104,38 @@ func TestScoreReplaysRecordingsAgainstAFreshEngine(t *testing.T) {
 	for _, want := range []string{"POST /things", "GET /things/{id}", "0%", "truthfulness:", "over 2 recorded responses on 2 endpoints", "/amount", "← convention"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("text missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestAChainedReadScoresAgainstTheStoredResource(t *testing.T) {
+	def, err := importer.NormalizeOpenAPI([]byte(thingsSpec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := &proxy.Record{TS: time.Now(), Upstream: "things", Method: "POST", Path: "/things", Status: 201, ReqKind: "json", ReqBody: map[string]any{"name": "x"},
+		RespKind: "json", RespBody: map[string]any{"id": "t1", "name": "x", "status": "active", "amount": float64(5)},
+		Redacted: []proxy.SectionRedaction{{Section: "resp_body", Pointer: "/id", Mode: "TOKENIZE"}}}
+	read := &proxy.Record{TS: time.Now(), Upstream: "things", Method: "GET", Path: "/things/t1", Status: 200,
+		RespKind: "json", RespBody: map[string]any{"id": "t1", "name": "x", "status": "active", "amount": float64(5)}}
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "recordings"), 0o700)
+	raw, _ := json.Marshal(create)
+	os.WriteFile(filepath.Join(dir, "recordings", "things.ndjson"), append(raw, '\n'), 0o600)
+	set, err := replay.Load(dir, "things", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := Score(def, []*proxy.Record{create, read}, Options{Seed: "truth-2", Recordings: set, RecordingsMode: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Unanswered) != 0 {
+		t.Fatalf("the read of the id the recorded create returned lands on the stored resource, not 404: %v\n%s", report.Unanswered, report.Text())
+	}
+	for _, es := range report.PerEndpoint {
+		if es.Method == "GET" && (es.Reproduced == 0 || es.Compared != 5) {
+			t.Fatalf("the chained read scores against the stored resource: %+v", es)
 		}
 	}
 }

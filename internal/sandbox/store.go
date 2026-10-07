@@ -71,7 +71,24 @@ CREATE TABLE IF NOT EXISTS resources (
   UNIQUE (sandbox_id, type, resource_key)
 );
 CREATE INDEX IF NOT EXISTS idx_resources_list ON resources (sandbox_id, type, resource_key);
+CREATE TABLE IF NOT EXISTS recorded_ids (
+  sandbox_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  type TEXT NOT NULL,
+  resource_key TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  PRIMARY KEY (sandbox_id, token)
+);
 `
+
+const recordedIDType = "_pikopod/recorded_id"
+
+type RecordedIDRecord struct {
+	Token       string `json:"token"`
+	Type        string `json:"type"`
+	ResourceKey string `json:"resourceKey"`
+	Seq         int64  `json:"seq"`
+}
 
 func OpenStore(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
@@ -274,12 +291,54 @@ func (s *Store) Serialize(sandboxID string) ([]ResourceRecord, error) {
 		r.UpdatedAtVirtual = fmt.Sprint(updated)
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	ids, err := s.ListRecordedIDs(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		attrs, _ := json.Marshal(id)
+		out = append(out, ResourceRecord{Type: recordedIDType, ResourceKey: id.Token, Attributes: attrs, CreatedAtVirtual: "0", UpdatedAtVirtual: "0"})
+	}
+	return out, nil
 }
 
 func (s *Store) Clear(sandboxID string) error {
+	if _, err := s.db.Exec(`DELETE FROM recorded_ids WHERE sandbox_id = ?`, sandboxID); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM resources WHERE sandbox_id = ?`, sandboxID)
 	return err
+}
+
+func (s *Store) PutRecordedID(sandboxID, token, typ, key string, seq int64) error {
+	_, err := s.db.Exec(`INSERT INTO recorded_ids (sandbox_id, token, type, resource_key, seq) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (sandbox_id, token) DO UPDATE SET type = excluded.type, resource_key = excluded.resource_key, seq = excluded.seq`, sandboxID, token, typ, key, seq)
+	return err
+}
+
+func (s *Store) RemoveRecordedID(sandboxID, token string) error {
+	_, err := s.db.Exec(`DELETE FROM recorded_ids WHERE sandbox_id = ? AND token = ?`, sandboxID, token)
+	return err
+}
+
+func (s *Store) ListRecordedIDs(sandboxID string) ([]RecordedIDRecord, error) {
+	rows, err := s.db.Query(`SELECT token, type, resource_key, seq FROM recorded_ids WHERE sandbox_id = ? ORDER BY seq ASC`, sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RecordedIDRecord
+	for rows.Next() {
+		var r RecordedIDRecord
+		if err := rows.Scan(&r.Token, &r.Type, &r.ResourceKey, &r.Seq); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) Load(sandboxID string, records []ResourceRecord) (*StoreTotals, error) {
@@ -290,6 +349,17 @@ func (s *Store) Load(sandboxID string, records []ResourceRecord) (*StoreTotals, 
 	defer tx.Rollback()
 	totals := &StoreTotals{}
 	for _, r := range records {
+		if r.Type == recordedIDType {
+			var id RecordedIDRecord
+			if json.Unmarshal(r.Attributes, &id) != nil {
+				continue
+			}
+			if _, err := tx.Exec(`INSERT INTO recorded_ids (sandbox_id, token, type, resource_key, seq) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (sandbox_id, token) DO UPDATE SET type = excluded.type, resource_key = excluded.resource_key, seq = excluded.seq`, sandboxID, id.Token, id.Type, id.ResourceKey, id.Seq); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		size := attributeSize(r.Attributes)
 		totals.Count++
 		totals.Bytes += size

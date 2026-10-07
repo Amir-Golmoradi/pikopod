@@ -71,6 +71,7 @@ type Engine struct {
 	recordingsFirst bool
 	seeding         seedState
 	scopes          scopeRegistry
+	recordedIDs     recordedIDs
 
 	webhookMu     sync.Mutex
 	webhookSeq    int64
@@ -177,6 +178,7 @@ func NewEngine(def *ir.ApiDefinition, cfg Config, store *Store) (*Engine, error)
 		e.rulesVersion = cfg.Rules.Version
 	}
 	e.journalTok = sanitize.NewTokenizer(cfg.Seed, "sandbox-journal", 1)
+	e.loadRecordedIDs()
 	if cfg.WebhookURL != "" {
 		e.webhookURL = cfg.WebhookURL
 		e.sinkCh = make(chan WebhookDelivery, webhookSinkQueue)

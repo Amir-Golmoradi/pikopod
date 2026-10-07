@@ -180,6 +180,7 @@ func (e *Engine) Restore(token string) error {
 		return err
 	}
 	_, err := e.store.Load(e.id, recs)
+	e.loadRecordedIDs()
 	return err
 }
 
@@ -187,6 +188,7 @@ func (e *Engine) Reset() error {
 	if err := e.store.Clear(e.id); err != nil {
 		return err
 	}
+	e.forgetRecordedIDs()
 	e.seeding.mu.Lock()
 	items := e.seeding.items
 	e.seeding.items = map[string][]map[string]any{}

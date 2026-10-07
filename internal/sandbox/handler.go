@@ -226,6 +226,11 @@ func (e *Engine) doCreate(ctx *storeCtx) (*RawResponse, error) {
 		stored.Set("id", idValue)
 		e.tracef("synth", "id ← store key %v", idValue)
 	}
+	if recordedInner != nil {
+		if token, isString := recordedIDValue(recordedInner); isString {
+			e.rememberRecordedID(token, ctx.op.typ, resourceKey)
+		}
+	}
 
 	marshaled, err := marshalJSValue(stored)
 	if err != nil {
@@ -494,6 +499,15 @@ func (e *Engine) quotaGuard(resourceBytes, projectedCount, projectedBytes int64)
 		return buildErrorResponse(507, "Insufficient Storage", nil)
 	}
 	return nil
+}
+
+func recordedIDValue(obj *JSONObject) (string, bool) {
+	v, ok := obj.Get("id")
+	if !ok {
+		return "", false
+	}
+	s, isString := v.(string)
+	return s, isString && s != ""
 }
 
 func (e *Engine) resourceIdentity(inner *ir.IrSchemaNode, ctx *synthContext, typ string, seq int64) (string, any, bool) {

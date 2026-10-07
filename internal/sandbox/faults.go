@@ -249,6 +249,15 @@ type wireFault struct {
 }
 
 func (e *Engine) handleWire(req *ingressRequest, innerPath string) (*RawResponse, *wireFault, error) {
+	innerPath, rewritten := e.rewriteRecordedIDs(req, innerPath)
+	resp, wf, err := e.handleRouted(req, innerPath)
+	if resp != nil && rewritten > 0 {
+		setHeader(resp, IDRewrittenHeader, strconv.Itoa(rewritten))
+	}
+	return resp, wf, err
+}
+
+func (e *Engine) handleRouted(req *ingressRequest, innerPath string) (*RawResponse, *wireFault, error) {
 	result := matchRoute(e.def.Endpoints, req.method, innerPath)
 	req.route = result
 	if result.kind != matchFound {
