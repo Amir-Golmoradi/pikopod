@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pikopod/pikopod/internal/curlline"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/spf13/cobra"
 )
@@ -81,5 +82,10 @@ func explainRequest(cmd *cobra.Command, name, method, path, body string, withAut
 	if bodyOut != "" {
 		fmt.Fprintf(out, "\n%s\n", bodyOut)
 	}
+	headers := map[string]string{}
+	for k := range req.Header {
+		headers[strings.ToLower(k)] = req.Header.Get(k)
+	}
+	fmt.Fprintf(out, "\nsend the same request to the running sandbox:\n  %s\n", curlline.Line(method, name, path, headers, []byte(body), eng.Credential()))
 	return nil
 }

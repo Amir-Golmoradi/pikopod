@@ -67,6 +67,29 @@ upstreams:
 | `mute` | Endpoint templates whose alerts are suppressed. |
 | `spec_source` | Arms the declared-drift watcher. See [spec_watch](#spec_watch). |
 | `incidents` | Tunes failed-exchange capture. See [incidents](#incidents). |
+| `record` | What never reaches disk. See [record](#record). |
+
+### record
+
+```yaml
+upstreams:
+  examplepay:
+    target: https://api.examplepay.com
+    record:
+      exclude: ["^/health", "^/kyc/documents"]
+```
+
+`record.exclude` is a list of regular expressions matched against the
+provider-relative request path, without the query string. A request that
+matches is forwarded exactly as every other request and then never recorded,
+even redacted, and never observed for drift or divergence. `/healthz` counts
+it as `recordings_excluded`. A 5xx or 429 on an excluded path is still an
+incident, with no recording behind it, so `pikopod reproduce` and
+`pikopod agent incidents export` refuse and name this key.
+
+`record.include` is the inverse: when set, only paths matching one pattern are
+recorded. `exclude` wins over `include`. A pattern that does not compile is a
+configuration error (exit 2).
 
 Use `pikopod agent volatile suggest <upstream>` to find noisy fields rather than
 guessing. It also reports configured entries that are **dead** (match nothing

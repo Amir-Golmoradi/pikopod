@@ -56,6 +56,7 @@ type Metrics struct {
 	RecordingErrors    atomic.Int64
 
 	RecordingsSampledOut atomic.Int64
+	RecordingsExcluded   atomic.Int64
 
 	WebhooksReceived atomic.Int64
 	WebhooksDropped  atomic.Int64
