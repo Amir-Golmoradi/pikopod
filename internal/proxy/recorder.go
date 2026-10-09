@@ -39,6 +39,8 @@ type Record struct {
 
 	Inbound  bool      `json:"inbound,omitempty"`
 	Delivery *Delivery `json:"delivery,omitempty"`
+
+	Excluded bool `json:"-"`
 }
 
 type Delivery struct {
@@ -78,7 +80,20 @@ type Recorder struct {
 	inbound   map[string]int64
 
 	specRules map[string][]sanitize.Rule
+	filters   map[string]func(string) bool
 	done      chan struct{}
+}
+
+func (rec *Recorder) SetFilters(filters map[string]func(string) bool) { rec.filters = filters }
+
+func (rec *Recorder) excludedRecord(ex *Exchange) *Record {
+	redactions := 0
+	record := &Record{TS: ex.Start, Upstream: ex.Upstream, Method: ex.Method, Path: rec.sanitizePath(ex.Path, &redactions),
+		Status: ex.Status, DurMS: ex.Duration.Milliseconds(), Redactions: redactions, Excluded: true}
+	if v := ex.RespHeader.Get("X-Pikopod-Error"); v != "" {
+		record.RespHeader = map[string]any{"x-pikopod-error": v}
+	}
+	return record
 }
 
 func (rec *Recorder) SetDeliveryExtractor(fn func(*Exchange) *Delivery) { rec.extractor = fn }
@@ -156,6 +171,13 @@ func (rec *Recorder) Run(captures <-chan *Exchange) {
 					rec.m.RecordingErrors.Add(1)
 				}
 			}()
+			if excluded := rec.filters[ex.Upstream]; !ex.Inbound && excluded != nil && excluded(ex.Path) {
+				rec.m.RecordingsExcluded.Add(1)
+				if rec.observer != nil && ex.Status >= 400 {
+					rec.observer(rec.excludedRecord(ex))
+				}
+				return
+			}
 			record, err := rec.sanitizeExchange(ex)
 			if err != nil {
 				rec.m.RecordingErrors.Add(1)

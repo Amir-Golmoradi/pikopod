@@ -286,7 +286,7 @@ func scenarioRun(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			res, err = scenario.Run(eng, parsed, inputs, seed)
+			res, err = scenario.RunWith(eng, parsed, inputs, seed, scenario.RunOptions{Mount: sandboxName})
 			done()
 			if err != nil {
 				return err
@@ -330,6 +330,9 @@ func writeRunResult(out io.Writer, name string, res *scenario.RunResult) {
 	fmt.Fprintf(out, "%s %s — %s (%s)\n", mark, name, res.Status, res.Summary)
 	for _, s := range res.Steps {
 		fmt.Fprintf(out, "    %-14s %-16s %s\n", s.Status, s.Key, s.Summary)
+		if curl, _ := s.Detail["curl"].(string); curl != "" && s.Status == scenario.RunFailed && s.Type == "REQUEST" {
+			fmt.Fprintf(out, "%34s%s\n", "", curl)
+		}
 	}
 }
 

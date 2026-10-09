@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pikopod/pikopod/internal/curlline"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/pathtmpl"
 	"github.com/pikopod/pikopod/internal/sandbox"
@@ -63,6 +64,7 @@ type stepOutcome struct {
 type RunOptions struct {
 	Subjects      []string
 	WallClockGaps bool
+	Mount         string
 }
 
 type runner struct {
@@ -76,6 +78,7 @@ type runner struct {
 	seedCounter    int
 	faultCounter   int
 	subjects       []string
+	mount          string
 	wallGaps       bool
 }
 
@@ -159,6 +162,7 @@ func RunWith(eng Target, def *ScenarioDefinition, provided map[string]any, seed 
 		virtualClockMs: startClock,
 		subjects:       subjects,
 		wallGaps:       opts.WallClockGaps,
+		mount:          opts.Mount,
 	}
 
 	res := &RunResult{Steps: make([]StepResult, 0, len(def.Steps))}
@@ -332,11 +336,13 @@ func (r *runner) request(step *Step) (stepOutcome, error) {
 		target += "?" + enc
 	}
 	var bodyReader *strings.Reader
+	var rawBody []byte
 	if cfg.HasBody {
 		raw, err := json.Marshal(body)
 		if err != nil {
 			return stepOutcome{}, err
 		}
+		rawBody = raw
 		bodyReader = strings.NewReader(string(raw))
 	} else {
 		bodyReader = strings.NewReader("")
@@ -401,12 +407,36 @@ func (r *runner) request(step *Step) (stepOutcome, error) {
 		status: verdict.Status, virtualEndMs: r.virtualClockMs,
 		captures: captures, notEvaluated: verdict.NotEvaluated, summary: summary,
 		detail: map[string]any{
+			"curl":       curlline.Line(cfg.Method, r.mount, target, curlHeaders(headers, rawBody), rawBody, r.credential()),
 			"request":    map[string]any{"method": cfg.Method, "path": path, "headers": headers, "query": query.Encode(), "body": body},
 			"response":   map[string]any{"status": status, "headers": respHeaders, "body": respBody},
 			"assertions": verdict.Results,
 			"captures":   resolvedPaths,
 		},
 	}, nil
+}
+
+func curlHeaders(headers map[string]string, body []byte) map[string]string {
+	if len(body) == 0 || headers["content-type"] != "" {
+		return headers
+	}
+	out := make(map[string]string, len(headers)+1)
+	for k, v := range headers {
+		out[k] = v
+	}
+	out["content-type"] = "application/json"
+	return out
+}
+
+func (r *runner) credential() string {
+	_, value, ok := r.eng.AuthHeader()
+	if !ok {
+		return ""
+	}
+	if i := strings.IndexByte(value, ' '); i > 0 {
+		return value[i+1:]
+	}
+	return value
 }
 
 func stepExpectsAuthFailure(step *Step) bool {

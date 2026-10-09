@@ -12,6 +12,7 @@ import (
 
 	"github.com/pikopod/pikopod/internal/alert"
 	"github.com/pikopod/pikopod/internal/contract"
+	"github.com/pikopod/pikopod/internal/curlline"
 	"github.com/pikopod/pikopod/internal/errfmt"
 	"github.com/pikopod/pikopod/internal/proxy"
 )
@@ -36,6 +37,25 @@ type Bundle struct {
 	Recording       proxy.Record     `json:"recording"`
 	ContractVersion int              `json:"contract_version"`
 	State           *BundleState     `json:"state,omitempty"`
+	Reproduce       *BundleReproduce `json:"reproduce,omitempty"`
+}
+
+type BundleReproduce struct {
+	Curl string `json:"curl"`
+}
+
+func CurlFor(mount string, rec *proxy.Record) string {
+	headers := map[string]string{}
+	for k, v := range rec.ReqHeader {
+		if s, ok := v.(string); ok {
+			headers[k] = s
+		}
+	}
+	var body []byte
+	if rec.ReqKind == "json" && rec.ReqBody != nil {
+		body, _ = json.Marshal(rec.ReqBody)
+	}
+	return curlline.Line(rec.Method, mount, rec.Path, headers, body, "")
 }
 
 type BundleState struct {
@@ -71,6 +91,7 @@ func Export(dataDir string, ev *alert.DriftEvent, retention time.Duration, host 
 		Recording:       *rec,
 		ContractVersion: version,
 		State:           captureState(dataDir, ev, rec),
+		Reproduce:       &BundleReproduce{Curl: CurlFor(ev.Upstream, rec)},
 	}, nil
 }
 

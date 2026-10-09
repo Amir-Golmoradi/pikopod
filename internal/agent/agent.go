@@ -19,6 +19,7 @@ import (
 	"github.com/pikopod/pikopod/internal/contract"
 	"github.com/pikopod/pikopod/internal/drift"
 	"github.com/pikopod/pikopod/internal/ir"
+	"github.com/pikopod/pikopod/internal/pathtmpl"
 	"github.com/pikopod/pikopod/internal/proxy"
 	"github.com/pikopod/pikopod/internal/sanitize"
 	"github.com/pikopod/pikopod/internal/specwatch"
@@ -124,6 +125,13 @@ func New(cfg *config.Config, alertOpts alert.Options, extraSinks ...alert.Sink) 
 	}
 	rec := proxy.NewRecorder(cfg.DataDir, tok, metrics)
 	rec.SetObserver(a.observe)
+	filters := map[string]func(string) bool{}
+	for name, up := range cfg.Upstreams {
+		if up.RecordsFiltered() {
+			filters[name] = up.RecordExcluded
+		}
+	}
+	rec.SetFilters(filters)
 	rec.SetDeliveryExtractor(webhooktap.New(nil).Extract)
 	rec.SetSampling(cfg.SampleRate())
 	rec.SetRetention(cfg.RetentionTTL())
@@ -245,6 +253,9 @@ func (a *Agent) observe(rec *proxy.Record) (notable bool) {
 	if rec.Inbound {
 		return a.observeDelivery(rec)
 	}
+	if rec.Excluded {
+		return a.observeExcluded(rec)
+	}
 
 	if a.Cfg.Refine.Enabled {
 		a.refiner(rec.Upstream).Observe(rec)
@@ -318,6 +329,28 @@ func (a *Agent) observe(rec *proxy.Record) (notable bool) {
 		a.Alerter.Report(f)
 	}
 	return notable
+}
+
+func (a *Agent) observeExcluded(rec *proxy.Record) bool {
+	pathOnly := rec.Path
+	if i := strings.IndexByte(pathOnly, '?'); i >= 0 {
+		pathOnly = pathOnly[:i]
+	}
+	template := pathtmpl.Templatize(pathOnly)
+	if a.muted[rec.Upstream][template] {
+		return true
+	}
+	kind, ok := a.incidentKind(rec, template)
+	if !ok {
+		return true
+	}
+	a.EventsEmitted.Add(1)
+	a.Alerter.Report(drift.Finding{
+		Upstream: rec.Upstream, Method: rec.Method, Template: template,
+		StatusClass: baseline.StatusClass(rec.Status), Kind: kind,
+		After: strconv.Itoa(rec.Status),
+	})
+	return true
 }
 
 func (a *Agent) incidentKind(rec *proxy.Record, template string) (drift.Kind, bool) {
@@ -498,6 +531,7 @@ func (a *Agent) healthz(w http.ResponseWriter, r *http.Request) {
 		"recordings_written":      a.Metrics.RecordingsWritten.Load(),
 		"recordings_dropped":      a.Metrics.CapturesDropped.Load(),
 		"recordings_sampled_out":  a.Metrics.RecordingsSampledOut.Load(),
+		"recordings_excluded":     a.Metrics.RecordingsExcluded.Load(),
 		"observer_panics":         a.Metrics.ObserverPanics.Load(),
 		"events_emitted":          a.EventsEmitted.Load(),
 		"divergence_checked":      a.DivergenceChecked.Load(),

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pikopod/pikopod/internal/errfmt"
@@ -37,6 +38,64 @@ type Upstream struct {
 	Incidents Incidents `yaml:"incidents,omitempty"`
 
 	Webhooks *Webhooks `yaml:"webhooks,omitempty"`
+
+	Record RecordFilter `yaml:"record,omitempty"`
+}
+
+type RecordFilter struct {
+	Include []string `yaml:"include,omitempty"`
+	Exclude []string `yaml:"exclude,omitempty"`
+}
+
+var recordPatterns sync.Map
+
+func recordPattern(expr string) (*regexp.Regexp, error) {
+	if re, ok := recordPatterns.Load(expr); ok {
+		return re.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	recordPatterns.Store(expr, re)
+	return re, nil
+}
+
+func (f RecordFilter) validate(upstream string) error {
+	for key, exprs := range map[string][]string{"include": f.Include, "exclude": f.Exclude} {
+		for _, expr := range exprs {
+			if _, err := recordPattern(expr); err != nil {
+				return errfmt.Newf("upstreams."+upstream+".record."+key+" is not a valid regular expression",
+					"fix the pattern; it is matched against the provider-relative request path without the query string",
+					"docs/config-reference.md#record", "%q: %v", expr, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (u Upstream) RecordExcluded(path string) bool {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	for _, expr := range u.Record.Exclude {
+		if re, err := recordPattern(expr); err == nil && re.MatchString(path) {
+			return true
+		}
+	}
+	if len(u.Record.Include) == 0 {
+		return false
+	}
+	for _, expr := range u.Record.Include {
+		if re, err := recordPattern(expr); err == nil && re.MatchString(path) {
+			return false
+		}
+	}
+	return true
+}
+
+func (u Upstream) RecordsFiltered() bool {
+	return len(u.Record.Include) > 0 || len(u.Record.Exclude) > 0
 }
 
 type Webhooks struct {
@@ -264,6 +323,11 @@ func (c *Config) finish() error {
 	if c.Warmup.MinHours == nil {
 		def := DefaultMinHours
 		c.Warmup.MinHours = &def
+	}
+	for name, up := range c.Upstreams {
+		if err := up.Record.validate(name); err != nil {
+			return err
+		}
 	}
 	if r := c.Sampling.Rate; r != nil && (*r < 0 || *r > 1) {
 		return errfmt.New(

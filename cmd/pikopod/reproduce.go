@@ -93,6 +93,20 @@ after the origin host's retention has aged the incident out.`,
 	return c
 }
 
+func recordingFor(cfg *config.Config, ev *alert.DriftEvent) (*proxy.Record, error) {
+	rec, err := bridge.FindRecording(cfg.DataDir, ev)
+	if err == nil {
+		return rec, nil
+	}
+	if up, ok := cfg.Upstreams[ev.Upstream]; ok && up.RecordExcluded(ev.Endpoint) {
+		return nil, errfmt.New("this incident was never recorded",
+			ev.Endpoint+" matches upstreams."+ev.Upstream+".record.exclude, so its traffic never reached disk; the "+ev.After+" was alerted as a fact",
+			"drop the pattern from upstreams."+ev.Upstream+".record.exclude (or add a record.include that names the path), let the failure recur, then reproduce that occurrence; or write the scenario by hand",
+			"docs/config-reference.md#record")
+	}
+	return nil, err
+}
+
 func incidentInputs(cfg *config.Config, arg string, out io.Writer) (*alert.DriftEvent, *proxy.Record, int, error) {
 	if bridge.IsBundleArg(arg) {
 		b, err := bridge.LoadBundle(arg)
@@ -106,7 +120,7 @@ func incidentInputs(cfg *config.Config, arg string, out io.Writer) (*alert.Drift
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	rec, err := bridge.FindRecording(cfg.DataDir, ev)
+	rec, err := recordingFor(cfg, ev)
 	if err != nil {
 		return nil, nil, 0, err
 	}

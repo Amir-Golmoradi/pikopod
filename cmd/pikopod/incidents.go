@@ -132,6 +132,9 @@ in the window.`,
 				if err != nil {
 					return err
 				}
+				if _, err := recordingFor(cfg, ev); err != nil {
+					return err
+				}
 				b, err := bridge.Export(cfg.DataDir, ev, cfg.RetentionTTL(), host, now)
 				if err != nil {
 					return err
